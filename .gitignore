@@ -1,0 +1,39 @@
+# 依赖
+node_modules/
+
+# 构建输出
+dist/
+dist-ssr/
+*.local
+
+# 自动生成的题库文件
+src/questionBank.js
+
+# 编辑器
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 日志
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 临时文件
+*.tar.gz
+*.zip
