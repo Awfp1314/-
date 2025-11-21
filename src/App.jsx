@@ -153,7 +153,13 @@ const ExamCountdown = React.memo(() => {
 
 export default function App() {
   // --- State 定义 ---
-  const [appState, setAppState] = useState('welcome'); // welcome, quiz, result, profile, login, admin
+  // 从localStorage恢复页面状态
+  const [appState, setAppState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('iot_app_state');
+      return saved || 'welcome';
+    } catch (e) { return 'welcome'; }
+  }); // welcome, quiz, result, profile, login, admin
   const [quizMode, setQuizMode] = useState('practice'); // practice, exam, instant, mistakes
   const [currentQuestions, setCurrentQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -181,6 +187,9 @@ export default function App() {
   
   // 复制QQ提示状态
   const [showCopyToast, setShowCopyToast] = useState(false);
+  
+  // 全局警告弹窗状态
+  const [globalWarning, setGlobalWarning] = useState(null);
 
   // 题库状态（从数据库加载）
   const [MOCK_QUESTION_BANK, setMOCK_QUESTION_BANK] = useState(DEFAULT_QUESTION_BANK);
@@ -206,6 +215,25 @@ export default function App() {
     
     setIsLoadingQuestions(false);
   };
+
+  // 保存页面状态到localStorage（排除quiz状态）
+  useEffect(() => {
+    if (appState !== 'quiz' && appState !== 'result') {
+      localStorage.setItem('iot_app_state', appState);
+    }
+  }, [appState]);
+
+  // 订阅全局消息推送
+  useEffect(() => {
+    const unsubscribe = api.subscribeWebSocket('GLOBAL_MESSAGE', (message) => {
+      if (message.type === 'warning') {
+        // 警告消息显示为弹窗
+        setGlobalWarning(message);
+      }
+      // 其他类型的消息通过通知系统显示
+    });
+    return unsubscribe;
+  }, []);
 
   // 初始化WebSocket连接和加载题库
   useEffect(() => {
@@ -1373,6 +1401,32 @@ export default function App() {
             setErrorQuestion(null);
           }}
         />
+      )}
+
+      {/* 全局警告弹窗 */}
+      {globalWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 animate-in zoom-in-95 duration-300">
+            <div className="bg-gradient-to-r from-red-500 to-orange-500 p-6 rounded-t-2xl">
+              <div className="flex items-center space-x-3 text-white">
+                <AlertTriangle className="w-8 h-8" />
+                <h3 className="text-2xl font-bold">系统警告</h3>
+              </div>
+            </div>
+            <div className="p-6">
+              <h4 className="text-xl font-bold text-slate-800 mb-3">{globalWarning.title}</h4>
+              <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{globalWarning.message}</p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-b-2xl flex justify-end">
+              <button
+                onClick={() => setGlobalWarning(null)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-lg transition-all"
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

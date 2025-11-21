@@ -165,7 +165,13 @@ app.post('/api/notifications', (req, res) => {
   const result = datastore.createNotification(notification);
   
   if (result.success) {
+    // 广播新通知
     broadcast('NEW_NOTIFICATION', result.notification);
+    
+    // 如果是警告类型，额外广播全局消息事件（触发弹窗）
+    if (result.notification.type === 'warning') {
+      broadcast('GLOBAL_MESSAGE', result.notification);
+    }
   }
   
   res.json(result);
