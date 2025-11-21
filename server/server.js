@@ -18,13 +18,62 @@ datastore.loadData();
 
 // WebSocket 连接管理
 const clients = new Set();
+const userSessions = new Map(); // userId -> { ws, status, lastActivity }
 
 wss.on('connection', (ws) => {
   clients.add(ws);
   console.log('🔌 新客户端连接，当前连接数:', clients.size);
 
+  // 处理客户端消息（用于用户认证和状态更新）
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      if (data.type === 'USER_CONNECT') {
+        // 用户登录时注册会话
+        userSessions.set(data.userId, {
+          ws,
+          status: 'online',
+          lastActivity: Date.now()
+        });
+        console.log(`👤 用户 ${data.userId} 上线`);
+        broadcast('USER_STATUS_CHANGED', { 
+          userId: data.userId, 
+          status: 'online' 
+        });
+      } else if (data.type === 'STATUS_UPDATE') {
+        // 更新用户状态
+        const session = userSessions.get(data.userId);
+        if (session) {
+          session.status = data.status;
+          session.lastActivity = Date.now();
+          broadcast('USER_STATUS_CHANGED', { 
+            userId: data.userId, 
+            status: data.status 
+          });
+        }
+      }
+    } catch (error) {
+      console.error('WebSocket消息处理错误:', error);
+    }
+  });
+
   ws.on('close', () => {
     clients.delete(ws);
+    
+    // 查找并移除断开的用户会话
+    for (const [userId, session] of userSessions.entries()) {
+      if (session.ws === ws) {
+        userSessions.delete(userId);
+        console.log(`👤 用户 ${userId} 离线`);
+        broadcast('USER_STATUS_CHANGED', { 
+          userId, 
+          status: 'offline' 
+        });
+        break;
+      }
+    }
+    
     console.log('❌ 客户端断开，当前连接数:', clients.size);
   });
 });
@@ -58,6 +107,19 @@ app.post('/api/login', (req, res) => {
 // 获取所有用户（管理员）
 app.get('/api/users', (req, res) => {
   const result = datastore.getAllUsers();
+  
+  // 添加在线状态信息
+  if (result.success) {
+    result.users = result.users.map(user => {
+      const session = userSessions.get(user.phone);
+      return {
+        ...user,
+        onlineStatus: session ? session.status : 'offline',
+        lastActivity: session ? session.lastActivity : null
+      };
+    });
+  }
+  
   res.json(result);
 });
 
@@ -169,7 +231,7 @@ app.post('/api/notifications', (req, res) => {
     broadcast('NEW_NOTIFICATION', result.notification);
     
     // 如果是警告类型，额外广播全局消息事件（触发弹窗）
-    if (result.notification.type === 'warning') {
+    if (result.notification.type === 'alert' || result.notification.type === 'warning') {
       broadcast('GLOBAL_MESSAGE', result.notification);
     }
   }

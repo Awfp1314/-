@@ -61,6 +61,13 @@ export function subscribeWebSocket(type, callback) {
   };
 }
 
+// 发送WebSocket消息
+export function sendWebSocketMessage(type, data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type, ...data }));
+  }
+}
+
 // HTTP请求封装
 async function request(url, options = {}) {
   try {

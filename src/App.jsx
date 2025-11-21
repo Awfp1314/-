@@ -226,7 +226,7 @@ export default function App() {
   // 订阅全局消息推送
   useEffect(() => {
     const unsubscribe = api.subscribeWebSocket('GLOBAL_MESSAGE', (message) => {
-      if (message.type === 'warning') {
+      if (message.type === 'alert' || message.type === 'warning') {
         // 警告消息显示为弹窗
         setGlobalWarning(message);
       }
@@ -377,6 +377,9 @@ export default function App() {
       setCurrentUser(loginUser);
       localStorage.setItem('iot_current_user', JSON.stringify(loginUser));
       
+      // 通知服务器用户上线
+      api.sendWebSocketMessage('USER_CONNECT', { userId: loginUser.phone });
+      
       // 加载用户答题进度
       await loadUserProgress(loginUser.phone);
       
@@ -418,7 +421,8 @@ export default function App() {
 
   // 保存用户答题进度到数据库
   const saveProgressToServer = async (newAnsweredIds, newWrongIds) => {
-    if (currentUser && !currentUser.isAdmin) {
+    if (currentUser) {
+      // 管理员和普通用户都保存进度
       await api.saveUserProgress(
         currentUser.phone,
         [...newAnsweredIds],
@@ -536,6 +540,14 @@ export default function App() {
 
     setQuizMode(mode);
 
+    // 通知服务器用户开始答题
+    if (currentUser) {
+      api.sendWebSocketMessage('STATUS_UPDATE', { 
+        userId: currentUser.phone, 
+        status: 'answering' 
+      });
+    }
+
     if (mode === 'exam') {
       // 模拟考：每次从头开始，清除之前的进度
       localStorage.removeItem('iot_exam_progress');
@@ -594,6 +606,15 @@ export default function App() {
       // 模拟考：清除进度
       localStorage.removeItem('iot_exam_progress');
     }
+    
+    // 通知服务器用户结束答题，恢复在线状态
+    if (currentUser) {
+      api.sendWebSocketMessage('STATUS_UPDATE', { 
+        userId: currentUser.phone, 
+        status: 'online' 
+      });
+    }
+    
     setAppState('welcome');
   };
 

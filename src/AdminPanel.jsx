@@ -37,6 +37,18 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
     }
   };
 
+  // 订阅用户状态变化
+  useEffect(() => {
+    const unsubscribe = api.subscribeWebSocket('USER_STATUS_CHANGED', (data) => {
+      setUsers(prev => prev.map(user => 
+        user.phone === data.userId 
+          ? { ...user, onlineStatus: data.status }
+          : user
+      ));
+    });
+    return unsubscribe;
+  }, []);
+
   // 获取所有用户反馈
   const [feedbacks, setFeedbacks] = useState([]);
 
@@ -177,29 +189,60 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
     }
   };
 
+  // 用户答题进度数据
+  const [userProgressData, setUserProgressData] = useState({});
+
+  // 加载所有用户的答题进度
+  useEffect(() => {
+    const loadAllProgress = async () => {
+      const progressMap = {};
+      for (const user of users) {
+        const result = await api.getUserProgress(user.phone);
+        if (result.success && result.progress) {
+          progressMap[user.phone] = {
+            answeredIds: new Set(result.progress.answeredIds || []),
+            wrongIds: new Set(result.progress.wrongIds || [])
+          };
+        }
+      }
+      setUserProgressData(progressMap);
+    };
+
+    if (users.length > 0) {
+      loadAllProgress();
+    }
+  }, [users]);
+
   // 统计数据
   const stats = useMemo(() => {
     const totalUsers = users.length;
     const totalQuestions = MOCK_QUESTION_BANK.length;
     
-    // 计算所有用户的平均完成率
+    // 计算所有用户的平均完成率和正确率
     let totalAnswered = 0;
     let totalCorrect = 0;
+    let userCount = 0;
     
-    users.forEach(user => {
-      // 这里简化处理，实际应该从用户的本地数据读取
-      // 由于我们使用localStorage，暂时用全局的answeredIds作为示例
+    Object.values(userProgressData).forEach(progress => {
+      const answered = progress.answeredIds.size;
+      const wrong = progress.wrongIds.size;
+      const correct = answered - wrong;
+      
+      totalAnswered += answered;
+      totalCorrect += correct;
+      userCount++;
     });
+
+    const avgCompletion = userCount > 0 ? Math.round(totalAnswered / userCount) : 0;
+    const avgAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
 
     return {
       totalUsers,
       totalQuestions,
-      avgCompletion: answeredIds.size,
-      avgAccuracy: answeredIds.size > 0 
-        ? Math.round(((answeredIds.size - wrongQuestionIds.size) / answeredIds.size) * 100) 
-        : 0
+      avgCompletion,
+      avgAccuracy
     };
-  }, [users, MOCK_QUESTION_BANK.length, answeredIds, wrongQuestionIds]);
+  }, [users, MOCK_QUESTION_BANK.length, userProgressData]);
 
   // 清理重复消息
   const cleanupDuplicates = () => {
@@ -510,9 +553,23 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
                         {user.registerTime ? new Date(user.registerTime).toLocaleDateString() : '-'}
                       </td>
                       <td className="py-3 px-4">
-                        <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">
-                          正常
-                        </span>
+                        {user.onlineStatus === 'online' && (
+                          <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 inline-flex">
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                            在线
+                          </span>
+                        )}
+                        {user.onlineStatus === 'answering' && (
+                          <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 inline-flex">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                            做题中
+                          </span>
+                        )}
+                        {user.onlineStatus === 'offline' && (
+                          <span className="bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-1 rounded">
+                            离线
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
