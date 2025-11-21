@@ -839,6 +839,16 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('questions');
+                          setQuestionSearch(report.question);
+                        }}
+                        className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg font-medium transition-colors flex items-center"
+                      >
+                        <Search className="w-3 h-3 mr-1" />
+                        跳转到题库
+                      </button>
                     </div>
                   </div>
                   

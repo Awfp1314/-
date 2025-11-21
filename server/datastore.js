@@ -294,13 +294,7 @@ export function getQuestionById(questionId) {
 // 添加新题目
 export function addQuestion(questionData) {
   try {
-    // 生成新ID（找到最大ID + 1）
-    const maxId = data.questionBank.length > 0 
-      ? Math.max(...data.questionBank.map(q => q.id))
-      : 0;
-    
     const newQuestion = {
-      id: maxId + 1,
       category: questionData.category || '未分类',
       question: questionData.question,
       options: questionData.options || [],
@@ -310,12 +304,15 @@ export function addQuestion(questionData) {
     };
     
     data.questionBank.push(newQuestion);
+    
+    // 添加后重新编号
+    reorderQuestionIds();
     saveData();
     
     return { 
       success: true, 
-      message: '题目添加成功',
-      question: newQuestion 
+      message: '题目添加成功，已重新编号',
+      question: data.questionBank[data.questionBank.length - 1] 
     };
   } catch (error) {
     return { success: false, message: '添加失败: ' + error.message };
@@ -350,6 +347,13 @@ export function updateQuestion(questionId, updates) {
   }
 }
 
+// 重新编号题库（按顺序1,2,3...）
+function reorderQuestionIds() {
+  data.questionBank.forEach((q, index) => {
+    q.id = index + 1;
+  });
+}
+
 // 删除题目
 export function deleteQuestion(questionId) {
   try {
@@ -361,11 +365,14 @@ export function deleteQuestion(questionId) {
     
     const deletedQuestion = data.questionBank[index];
     data.questionBank.splice(index, 1);
+    
+    // 删除后重新编号
+    reorderQuestionIds();
     saveData();
     
     return { 
       success: true, 
-      message: '题目删除成功',
+      message: '题目删除成功，已重新编号',
       question: deletedQuestion
     };
   } catch (error) {

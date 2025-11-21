@@ -43,7 +43,7 @@ export const QuestionManager = ({ MOCK_QUESTION_BANK }) => {
 
   // 搜索和筛选
   useEffect(() => {
-    let filtered = questions;
+    let filtered = [...questions]; // 创建新数组，避免引用问题
 
     // 分类筛选
     if (categoryFilter !== '全部') {
@@ -51,10 +51,12 @@ export const QuestionManager = ({ MOCK_QUESTION_BANK }) => {
     }
 
     // 搜索筛选
-    if (searchTerm) {
+    if (searchTerm.trim()) {
+      const search = searchTerm.trim().toLowerCase();
       filtered = filtered.filter(q => 
-        q.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        q.id.toString().includes(searchTerm)
+        q.question.toLowerCase().includes(search) ||
+        q.id.toString() === searchTerm.trim() || // 精确匹配ID
+        q.category.toLowerCase().includes(search)
       );
     }
 
