@@ -28,6 +28,7 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
+      console.log('📥 收到WebSocket消息:', data);
       
       if (data.type === 'USER_CONNECT') {
         // 用户登录时注册会话
@@ -36,7 +37,7 @@ wss.on('connection', (ws) => {
           status: 'online',
           lastActivity: Date.now()
         });
-        console.log(`👤 用户 ${data.userId} 上线`);
+        console.log(`👤 用户 ${data.userId} 上线，当前在线: ${userSessions.size}`);
         broadcast('USER_STATUS_CHANGED', { 
           userId: data.userId, 
           status: 'online' 
@@ -47,11 +48,16 @@ wss.on('connection', (ws) => {
         if (session) {
           session.status = data.status;
           session.lastActivity = Date.now();
+          console.log(`👤 用户 ${data.userId} 状态更新为: ${data.status}`);
           broadcast('USER_STATUS_CHANGED', { 
             userId: data.userId, 
             status: data.status 
           });
+        } else {
+          console.warn(`⚠️ 未找到用户会话: ${data.userId}`);
         }
+      } else {
+        console.log(`📨 未处理的消息类型: ${data.type}`);
       }
     } catch (error) {
       console.error('WebSocket消息处理错误:', error);

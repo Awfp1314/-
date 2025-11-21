@@ -76,7 +76,11 @@ export function subscribeWebSocket(type, callback) {
 // 发送WebSocket消息
 export function sendWebSocketMessage(type, data) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type, ...data }));
+    const message = { type, ...data };
+    console.log('📤 发送WebSocket消息:', message);
+    ws.send(JSON.stringify(message));
+  } else {
+    console.warn('⚠️ WebSocket未连接，无法发送消息:', type, ws?.readyState);
   }
 }
 
