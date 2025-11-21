@@ -1,0 +1,159 @@
+═══════════════════════════════════════════════════════
+    物联网刷题系统 - 一键部署（复制粘贴版）
+═══════════════════════════════════════════════════════
+
+📋 第1步：SSH登录服务器
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+在PowerShell或CMD中运行：
+
+ssh -p 2233 root@47.108.72.126
+
+输入密码：Wjj19312985136...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 第2步：复制以下所有命令，粘贴到服务器终端
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+一次性复制下面所有内容，粘贴到SSH终端，按回车：
+
+─────────────────────── 复制从这里开始 ───────────────────────
+
+#!/bin/bash
+set -e
+
+echo '🚀 开始部署物联网刷题系统...'
+echo ''
+
+# 安装Git
+if ! command -v git &> /dev/null; then
+    echo '📥 安装Git...'
+    apt-get update
+    apt-get install -y git
+fi
+
+# 配置SSH
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+if ! grep -q "github.com" ~/.ssh/config 2>/dev/null; then
+    cat >> ~/.ssh/config << 'SSHCONFIG'
+Host github.com
+    HostName github.com
+    User git
+    StrictHostKeyChecking no
+    UserKnownHostsFile=/dev/null
+SSHCONFIG
+    chmod 600 ~/.ssh/config
+fi
+
+# 配置Git
+git config --global user.email "admin@iot-quiz.com"
+git config --global user.name "IOT Quiz Admin"
+
+# 安装Node.js
+if ! command -v node &> /dev/null; then
+    echo '📥 安装Node.js...'
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    apt-get install -y nodejs
+fi
+
+# 安装PM2
+if ! command -v pm2 &> /dev/null; then
+    echo '📥 安装PM2...'
+    npm install -g pm2
+fi
+
+# 安装serve
+npm install -g serve
+
+# 克隆或更新项目
+APP_DIR="/var/www/iot-quiz"
+if [ -d "$APP_DIR" ]; then
+    echo '🔄 项目已存在，更新代码...'
+    cd $APP_DIR
+    
+    # 备份数据
+    if [ -f "server/data.json" ]; then
+        mkdir -p /var/backups/iot-quiz
+        cp server/data.json /var/backups/iot-quiz/data.$(date +%Y%m%d_%H%M%S).json
+        cp server/data.json /tmp/data.backup.json
+    fi
+    
+    git pull origin main || git pull origin master
+    
+    # 恢复数据
+    if [ -f "/tmp/data.backup.json" ]; then
+        cp /tmp/data.backup.json server/data.json
+    fi
+else
+    echo '📥 从GitHub克隆项目...'
+    mkdir -p /var/www
+    cd /var/www
+    git clone https://github.com/Awfp1314/-.git iot-quiz
+    cd iot-quiz
+fi
+
+cd /var/www/iot-quiz
+
+# 安装依赖
+echo '📦 安装依赖...'
+npm install
+
+# 构建前端
+echo '🔨 构建前端...'
+npm run build
+
+# 停止旧进程
+echo '🛑 停止旧进程...'
+pm2 delete all 2>/dev/null || true
+
+# 启动后端
+echo '🚀 启动后端...'
+pm2 start server/server.js --name "iot-backend" \
+    --log /var/log/iot-backend.log \
+    --error /var/log/iot-backend-error.log
+
+# 启动前端
+echo '🚀 启动前端...'
+pm2 start "npx serve -s dist -l 4000" --name "iot-frontend" \
+    --log /var/log/iot-frontend.log
+
+# 保存配置
+pm2 save
+pm2 startup | tail -1 | bash 2>/dev/null || true
+
+echo ''
+echo '╔═══════════════════════════════════════╗'
+echo '║            ✅ 部署完成！              ║'
+echo '╚═══════════════════════════════════════╝'
+echo ''
+echo '🌐 访问地址:'
+echo '   前端: http://47.108.72.126:4000'
+echo '   后端: http://47.108.72.126:3030'
+echo ''
+echo '📊 查看状态: pm2 status'
+echo '📋 查看日志: pm2 logs'
+echo ''
+
+─────────────────────── 复制到这里结束 ───────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 提示
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. 选中上面所有脚本内容（从#!/bin/bash到最后）
+2. Ctrl+C 复制
+3. 在SSH终端右键粘贴
+4. 按回车
+5. 等待5-10分钟完成
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 完成后访问
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+http://47.108.72.126:4000
+
+═══════════════════════════════════════════════════════
