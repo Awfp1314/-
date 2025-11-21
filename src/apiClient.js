@@ -5,17 +5,29 @@ const WS_URL = 'ws://localhost:3030';
 // WebSocket连接
 let ws = null;
 let wsCallbacks = new Map();
+let wsConnectedCallback = null; // 连接成功后的回调
 
 // 连接WebSocket
-export function connectWebSocket() {
+export function connectWebSocket(onConnected) {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    if (onConnected) onConnected();
     return;
+  }
+
+  if (onConnected) {
+    wsConnectedCallback = onConnected;
   }
 
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
     console.log('✅ WebSocket已连接');
+    
+    // 触发连接成功回调
+    if (wsConnectedCallback) {
+      wsConnectedCallback();
+      wsConnectedCallback = null;
+    }
   };
 
   ws.onmessage = (event) => {

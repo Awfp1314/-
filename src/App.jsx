@@ -237,21 +237,23 @@ export default function App() {
 
   // 初始化WebSocket连接和加载题库
   useEffect(() => {
-    api.connectWebSocket();
-    console.log('🔌 已初始化WebSocket连接');
+    // 连接WebSocket，并在连接成功后发送用户在线状态
+    api.connectWebSocket(() => {
+      console.log('🔌 WebSocket连接已建立');
+      
+      // 如果用户已登录，通知在线状态
+      if (currentUser && currentUser.phone) {
+        api.sendWebSocketMessage('USER_CONNECT', { userId: currentUser.phone });
+        console.log('📡 已发送用户在线状态:', currentUser.phone);
+      }
+    });
     
     // 加载题库
     loadQuestionBank();
     
-    // 如果用户已登录，加载答题进度并通知在线状态
+    // 如果用户已登录，加载答题进度
     if (currentUser && currentUser.phone) {
       loadUserProgress(currentUser.phone);
-      
-      // 延迟一下确保WebSocket已连接
-      setTimeout(() => {
-        api.sendWebSocketMessage('USER_CONNECT', { userId: currentUser.phone });
-        console.log('📡 已发送用户在线状态:', currentUser.phone);
-      }, 500);
     }
   }, []);
 
@@ -383,8 +385,11 @@ export default function App() {
       setCurrentUser(loginUser);
       localStorage.setItem('iot_current_user', JSON.stringify(loginUser));
       
-      // 通知服务器用户上线
-      api.sendWebSocketMessage('USER_CONNECT', { userId: loginUser.phone });
+      // 通知服务器用户上线（确保WebSocket已连接）
+      setTimeout(() => {
+        api.sendWebSocketMessage('USER_CONNECT', { userId: loginUser.phone });
+        console.log('📡 用户登录后发送在线状态:', loginUser.phone);
+      }, 200);
       
       // 加载用户答题进度
       await loadUserProgress(loginUser.phone);
