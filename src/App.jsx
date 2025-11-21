@@ -243,9 +243,15 @@ export default function App() {
     // 加载题库
     loadQuestionBank();
     
-    // 如果用户已登录，加载答题进度
+    // 如果用户已登录，加载答题进度并通知在线状态
     if (currentUser && currentUser.phone) {
       loadUserProgress(currentUser.phone);
+      
+      // 延迟一下确保WebSocket已连接
+      setTimeout(() => {
+        api.sendWebSocketMessage('USER_CONNECT', { userId: currentUser.phone });
+        console.log('📡 已发送用户在线状态:', currentUser.phone);
+      }, 500);
     }
   }, []);
 

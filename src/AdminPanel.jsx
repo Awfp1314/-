@@ -40,6 +40,7 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
   // 订阅用户状态变化
   useEffect(() => {
     const unsubscribe = api.subscribeWebSocket('USER_STATUS_CHANGED', (data) => {
+      console.log('👤 用户状态变化:', data);
       setUsers(prev => prev.map(user => 
         user.phone === data.userId 
           ? { ...user, onlineStatus: data.status }
@@ -47,6 +48,14 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
       ));
     });
     return unsubscribe;
+  }, []);
+
+  // 定期刷新用户列表（每30秒）
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUsers();
+    }, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // 获取所有用户反馈
@@ -553,19 +562,17 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
                         {user.registerTime ? new Date(user.registerTime).toLocaleDateString() : '-'}
                       </td>
                       <td className="py-3 px-4">
-                        {user.onlineStatus === 'online' && (
+                        {user.onlineStatus === 'online' ? (
                           <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 inline-flex">
                             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                             在线
                           </span>
-                        )}
-                        {user.onlineStatus === 'answering' && (
+                        ) : user.onlineStatus === 'answering' ? (
                           <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 inline-flex">
                             <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
                             做题中
                           </span>
-                        )}
-                        {user.onlineStatus === 'offline' && (
+                        ) : (
                           <span className="bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-1 rounded">
                             离线
                           </span>
