@@ -37,7 +37,7 @@ function parseQuestionBank() {
       
       const idMatch = line.match(/题目\s+(\d+)/);
       currentQuestion = {
-        id: idMatch ? parseInt(idMatch[1]) : questions.length + 1,
+        id: questions.length + 1,  // 使用连续递增的ID，避免重复
         category: currentCategory || '未分类',
         question: '',
         options: [],
