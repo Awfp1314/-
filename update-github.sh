@@ -88,8 +88,11 @@ NODESCRIPT
     rm /tmp/data.current.json
 fi
 
-# === 4. 安装依赖 ===
-echo "📦 安装依赖..."
+# === 4. 配置npm镜像并安装依赖 ===
+echo "⚡ 配置npm镜像加速..."
+npm config set registry https://registry.npmmirror.com
+
+echo "📥 安装依赖（使用淘宝镜像）..."
 npm install --production
 
 # === 5. 构建前端 ===

@@ -96,8 +96,12 @@ fi
 
 cd /var/www/iot-quiz
 
+# 配置npm使用国内镜像（加速）
+echo '⚡ 配置npm镜像加速...'
+npm config set registry https://registry.npmmirror.com
+
 # 安装依赖
-echo '📦 安装依赖...'
+echo '📦 安装依赖（使用淘宝镜像）...'
 npm install
 
 # 构建前端

@@ -653,48 +653,48 @@ export default function App() {
   // --- 组件视图 ---
 
   const WelcomeView = () => (
-    <div className="flex flex-col items-center mt-12 text-center space-y-8 animate-fade-in">
+    <div className="flex flex-col items-center mt-6 sm:mt-12 text-center space-y-6 sm:space-y-8 animate-fade-in">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-slate-800">物联网安调在线刷题系统</h1>
-        <p className="text-slate-500">IoT Installation & Debugging Question Bank</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 px-4">物联网安调在线刷题系统</h1>
+        <p className="text-sm sm:text-base text-slate-500">IoT Installation & Debugging Question Bank</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl px-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full max-w-4xl px-3 sm:px-4">
         <button 
           onClick={() => startQuiz('practice')}
-          className="group p-6 bg-white border border-slate-200 rounded-xl hover:border-indigo-500 hover:shadow-lg transition-all text-left flex flex-col h-full"
+          className="group p-4 sm:p-6 bg-white border border-slate-200 rounded-xl hover:border-indigo-500 hover:shadow-lg transition-all text-left flex flex-col h-full active:scale-95"
         >
           <div className="flex items-center justify-between mb-3">
             <Layers className="w-8 h-8 text-indigo-500" />
             <span className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2 py-1 rounded">基础</span>
           </div>
-          <h3 className="font-bold text-lg text-slate-800">全库顺序练习</h3>
-          <p className="text-sm text-slate-500 mt-2 opacity-80">按顺序练习所有题目，无时间限制。</p>
+          <h3 className="font-bold text-base sm:text-lg text-slate-800">全库顺序练习</h3>
+          <p className="text-xs sm:text-sm text-slate-500 mt-2 opacity-80">按顺序练习所有题目，无时间限制。</p>
         </button>
 
         <button 
           onClick={() => startQuiz('exam')}
-          className="group p-6 bg-white border border-slate-200 rounded-xl hover:border-purple-500 hover:shadow-lg transition-all text-left flex flex-col h-full"
+          className="group p-4 sm:p-6 bg-white border border-slate-200 rounded-xl hover:border-purple-500 hover:shadow-lg transition-all text-left flex flex-col h-full active:scale-95"
         >
           <div className="flex items-center justify-between mb-3">
             <Clock className="w-8 h-8 text-purple-500" />
             <span className="bg-purple-50 text-purple-600 text-xs font-bold px-2 py-1 rounded">模考</span>
           </div>
-          <h3 className="font-bold text-lg text-slate-800">限时随机模考</h3>
-          <p className="text-sm text-slate-500 mt-2 opacity-80">随机抽取 100 题，限时 150 分钟。</p>
+          <h3 className="font-bold text-base sm:text-lg text-slate-800">限时随机模考</h3>
+          <p className="text-xs sm:text-sm text-slate-500 mt-2 opacity-80">随机抽取 100 题，限时 150 分钟。</p>
         </button>
 
         <button 
           onClick={() => startQuiz('instant')}
-          className="group p-6 bg-orange-50 border border-orange-200 rounded-xl hover:border-orange-500 hover:shadow-lg hover:bg-orange-100 transition-all text-left flex flex-col h-full relative overflow-hidden"
+          className="group p-4 sm:p-6 bg-orange-50 border border-orange-200 rounded-xl hover:border-orange-500 hover:shadow-lg hover:bg-orange-100 transition-all text-left flex flex-col h-full relative overflow-hidden active:scale-95"
         >
           <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-orange-200 rounded-full opacity-20 group-hover:scale-150 transition-transform" />
           <div className="flex items-center justify-between mb-3 relative z-10">
             <Zap className="w-8 h-8 text-orange-500" />
             <span className="bg-orange-200 text-orange-800 text-xs font-bold px-2 py-1 rounded">推荐</span>
           </div>
-          <h3 className="font-bold text-lg text-orange-900 relative z-10">闪电刷题</h3>
-          <p className="text-sm text-orange-800 mt-2 opacity-80 relative z-10">随机抽取，动画开箱，即刻开练。</p>
+          <h3 className="font-bold text-base sm:text-lg text-orange-900 relative z-10">闪电刷题</h3>
+          <p className="text-xs sm:text-sm text-orange-800 mt-2 opacity-80 relative z-10">随机抽取，动画开箱，即刻开练。</p>
         </button>
 
         <button 
@@ -1026,14 +1026,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="max-w-full mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-full mx-auto px-2 sm:px-4 h-14 sm:h-16 flex items-center justify-between">
           {/* 左侧区域 */}
           <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setAppState('welcome')}>
               <div className="bg-indigo-600 text-white p-1.5 rounded-lg">
                 <Cpu className="w-5 h-5" />
               </div>
-              <span className="font-bold text-xl tracking-tight text-slate-800 whitespace-nowrap">IoT Master</span>
+              <span className="font-bold text-base sm:text-xl tracking-tight text-slate-800 whitespace-nowrap">IoT Master</span>
             </div>
             
             {/* 倒计时 */}
@@ -1041,7 +1041,7 @@ export default function App() {
           </div>
           
           {/* 右侧区域 */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
             <div className="hidden sm:flex items-center bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600 border border-slate-200">
                 <BarChart3 className="w-3.5 h-3.5 mr-1.5 text-indigo-500" />
                 <span className="whitespace-nowrap">累计刷题: <span className="text-indigo-600 font-bold">{answeredIds.size}</span> / {MOCK_QUESTION_BANK.length}</span>
@@ -1067,10 +1067,11 @@ export default function App() {
             ) : (
               <button
                 onClick={() => setAppState('login')}
-                className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-all"
+                className="flex items-center space-x-1 sm:space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-all"
               >
                 <User className="w-4 h-4" />
-                <span>登录 / 注册</span>
+                <span className="hidden sm:inline">登录 / 注册</span>
+                <span className="sm:hidden">登录</span>
               </button>
             )}
 
@@ -1086,7 +1087,7 @@ export default function App() {
       {/* 全局公告 */}
       <AnnouncementBanner />
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {appState === 'welcome' && <WelcomeView />}
         {appState === 'quiz' && <QuizView />}
         {appState === 'result' && <ResultView />}
@@ -1099,18 +1100,18 @@ export default function App() {
         href="https://github.com/Awfp1314"
         target="_blank" 
         rel="noreferrer"
-        className="fixed bottom-4 left-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur border border-slate-200 px-3 py-1.5 rounded-full shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group"
+        className="fixed bottom-16 sm:bottom-4 left-2 sm:left-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur border border-slate-200 px-2 sm:px-3 py-1.5 rounded-full shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group"
       >
         <Github className="w-4 h-4 text-slate-500 group-hover:text-indigo-600 transition-colors" />
-        <span className="text-xs font-medium text-slate-500 group-hover:text-indigo-600 transition-colors">GitHub Project</span>
+        <span className="text-xs font-medium text-slate-500 group-hover:text-indigo-600 transition-colors hidden sm:inline">GitHub Project</span>
       </a>
 
       <a 
         href="mailto:feedback@iotmaster.com"
-        className="fixed bottom-4 right-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur border border-slate-200 px-3 py-1.5 rounded-full shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group"
+        className="fixed bottom-16 sm:bottom-4 right-2 sm:right-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur border border-slate-200 px-2 sm:px-3 py-1.5 rounded-full shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group"
       >
         <Mail className="w-4 h-4 text-slate-500 group-hover:text-indigo-600 transition-colors" />
-        <span className="text-xs font-medium text-slate-500 group-hover:text-indigo-600 transition-colors">联系作者</span>
+        <span className="text-xs font-medium text-slate-500 group-hover:text-indigo-600 transition-colors hidden sm:inline">联系作者</span>
       </a>
 
       {showInstantModal && instantQuestion && (

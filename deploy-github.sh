@@ -96,9 +96,14 @@ else
     cd \$APP_DIR
 fi
 
+# 配置npm镜像加速
+echo "⚡ 配置npm镜像..."
+npm config set registry https://registry.npmmirror.com
+
 # 安装依赖
-echo "📦 安装依赖..."
-npm install
+echo "📥 安装项目依赖（使用淘宝镜像）..."
+cd $APP_DIR
+npm install --production
 
 # 构建前端
 echo "🔨 构建前端..."
