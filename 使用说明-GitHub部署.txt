@@ -1,0 +1,129 @@
+===============================================
+   物联网刷题系统 - GitHub部署方式
+===============================================
+
+📋 准备工作
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. 在GitHub创建一个仓库（公开或私有都可以）
+2. 获取仓库地址，例如：
+   https://github.com/你的用户名/iot-quiz.git
+
+
+🔧 配置步骤
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+第1步：修改部署脚本
+打开 deploy-github.sh，修改第17行：
+
+    GITHUB_REPO="https://github.com/你的用户名/iot-quiz.git"
+
+如果是私有仓库，需要用token：
+    GITHUB_REPO="https://你的用户名:ghp_你的token@github.com/你的用户名/iot-quiz.git"
+
+第2步：推送代码到GitHub
+    git init
+    git add .
+    git commit -m "初始化项目"
+    git branch -M main
+    git remote add origin https://github.com/你的用户名/iot-quiz.git
+    git push -u origin main
+
+
+🚀 首次部署
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+chmod +x deploy-github.sh
+./deploy-github.sh
+
+功能：
+  ✓ 自动在服务器上克隆GitHub项目
+  ✓ 自动安装Git、Node.js、PM2
+  ✓ 自动构建和启动服务
+
+
+🔄 日常更新
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+修改代码后：
+
+1. 推送到GitHub:
+    git add .
+    git commit -m "更新说明"
+    git push
+
+2. 部署到服务器:
+    chmod +x update-github.sh
+    ./update-github.sh
+
+功能：
+  ✓ 从GitHub拉取最新代码
+  ✓ 自动备份数据库
+  ✓ 智能数据迁移
+  ✓ 热重载（用户无感知）
+
+
+📍 访问地址
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+前端: http://47.108.72.126:4000
+后端: http://47.108.72.126:3030
+
+
+🔐 私有仓库配置
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+如果使用私有仓库，需要创建Personal Access Token:
+
+1. GitHub → Settings → Developer settings
+2. Personal access tokens → Tokens (classic)
+3. Generate new token
+4. 勾选 repo 权限
+5. 生成token（ghp_xxxxxxxxxx）
+6. 在脚本中使用:
+   https://用户名:ghp_token@github.com/用户名/仓库名.git
+
+
+🔒 数据安全
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 重要：data.json不会上传到GitHub
+  - .gitignore已配置忽略server/data.json
+  - 数据只保存在服务器
+  - 每次更新自动备份
+
+
+📊 工作流程
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+本地修改 → Git推送 → GitHub仓库 → 服务器拉取 → 热更新
+
+优点：
+  ✓ 版本控制（可回滚）
+  ✓ 团队协作友好
+  ✓ 自动化部署
+  ✓ 数据安全
+
+
+🆚 对比直接上传方式
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GitHub方式:
+  ✓ 有版本历史
+  ✓ 方便团队协作
+  ✓ 可以回滚
+  ✗ 需要推送到GitHub
+
+直接上传方式 (deploy.sh):
+  ✓ 不依赖GitHub
+  ✓ 更快（少一步）
+  ✓ 离线可用
+  ✗ 无版本控制
+
+
+💡 推荐使用场景
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ GitHub方式适合:
+  - 多人协作
+  - 需要版本管理
+  - 频繁更新
+
+✅ 直接上传适合:
+  - 个人项目
+  - 快速部署
+  - 无需版本控制
+
+
+===============================================

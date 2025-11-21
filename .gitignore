@@ -37,3 +37,12 @@ lerna-debug.log*
 # 临时文件
 *.tar.gz
 *.zip
+
+# 数据库文件（重要：不要上传到GitHub）
+server/data.json
+backups/
+*.backup.json
+
+# 部署相关
+deploy.tar.gz
+update.tar.gz

@@ -7,12 +7,18 @@
     "dev": "npm run parse && vite",
     "build": "npm run parse && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && bash deploy.sh"
+    "deploy": "bash deploy.sh",
+    "update": "bash update.sh",
+    "deploy:github": "bash deploy-github.sh",
+    "update:github": "bash update-github.sh",
+    "push": "bash push.sh",
+    "发布": "bash 一键发布.sh"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "lucide-react": "^0.294.0"
+    "lucide-react": "^0.294.0",
+    "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

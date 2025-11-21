@@ -1,96 +1,123 @@
 #!/bin/bash
 
-# 物联网刷题系统 - Ubuntu 服务器部署脚本
-# 使用方法: bash deploy.sh
+# ==============================================
+# 物联网刷题系统 - 一键自动部署脚本
+# 功能：自动检查依赖、安装、启动服务
+# 使用：./deploy.sh
+# ==============================================
 
-set -e  # 遇到错误立即退出
+set -e
 
-echo "🚀 开始部署物联网刷题系统..."
+SERVER_IP="47.108.72.126"
+SERVER_PORT="2233"
+SERVER_USER="root"
+SERVER_PASS="Wjj19312985136..."
 
-# 检查dist目录
-if [ ! -d "dist" ]; then
-  echo "❌ 错误: dist目录不存在，请先运行 npm run build"
-  exit 1
+echo "🚀 开始自动部署..."
+echo ""
+
+# 1. 本地打包
+echo "📦 [1/3] 打包前端..."
+npm install
+npm run build
+
+# 2. 创建部署包（排除数据文件）
+echo "📦 [2/3] 创建部署包..."
+tar -czf deploy.tar.gz \
+    --exclude='node_modules' \
+    --exclude='.git' \
+    --exclude='*.log' \
+    --exclude='*.md' \
+    dist/ server/ package.json package-lock.json
+
+# 3. 上传并自动部署
+echo "🚀 [3/3] 上传并部署到服务器..."
+sshpass -p "$SERVER_PASS" scp -P $SERVER_PORT deploy.tar.gz $SERVER_USER@$SERVER_IP:/tmp/
+
+sshpass -p "$SERVER_PASS" ssh -p $SERVER_PORT $SERVER_USER@$SERVER_IP << 'EOF'
+set -e
+
+APP_DIR="/var/www/iot-quiz"
+DATA_FILE="$APP_DIR/server/data.json"
+
+echo "📂 准备应用目录..."
+mkdir -p $APP_DIR
+
+# 备份现有数据
+if [ -f "$DATA_FILE" ]; then
+    echo "💾 备份数据库..."
+    mkdir -p /var/backups/iot-quiz
+    cp $DATA_FILE /var/backups/iot-quiz/data.$(date +%Y%m%d_%H%M%S).json
+    mv $DATA_FILE /tmp/data.json.backup
 fi
 
-# 配置（请根据实际情况修改）
-SERVER_USER="root"                    # 服务器用户名
-SERVER_HOST="your-server-ip"          # 服务器IP地址
-DEPLOY_PATH="/var/www/iot-quiz"       # 部署路径
-NGINX_CONF="/etc/nginx/sites-available/iot-quiz"
+# 解压新版本
+echo "📦 解压应用..."
+cd $APP_DIR
+tar -xzf /tmp/deploy.tar.gz
 
-echo "📦 压缩构建文件..."
-cd dist
-tar -czf ../dist.tar.gz .
-cd ..
+# 恢复数据
+if [ -f "/tmp/data.json.backup" ]; then
+    echo "♻️  恢复数据库..."
+    mv /tmp/data.json.backup $DATA_FILE
+fi
 
-echo "📤 上传文件到服务器..."
-scp dist.tar.gz $SERVER_USER@$SERVER_HOST:/tmp/
+# 自动检查和安装依赖
+echo "🔍 检查运行环境..."
 
-echo "🔧 在服务器上配置..."
-ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
-  # 创建部署目录
-  sudo mkdir -p /var/www/iot-quiz
-  
-  # 解压文件
-  cd /tmp
-  sudo tar -xzf dist.tar.gz -C /var/www/iot-quiz
-  sudo rm dist.tar.gz
-  
-  # 设置权限
-  sudo chown -R www-data:www-data /var/www/iot-quiz
-  sudo chmod -R 755 /var/www/iot-quiz
-  
-  # 配置Nginx（如果未配置）
-  if [ ! -f /etc/nginx/sites-available/iot-quiz ]; then
-    echo "创建Nginx配置..."
-    sudo tee /etc/nginx/sites-available/iot-quiz > /dev/null << 'EOF'
-server {
-    listen 80;
-    server_name your-domain.com;  # 修改为你的域名或IP
-    
-    root /var/www/iot-quiz;
-    index index.html;
-    
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-    
-    # 启用gzip压缩
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-    
-    # 缓存静态资源
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-EOF
-    
-    # 启用站点
-    sudo ln -sf /etc/nginx/sites-available/iot-quiz /etc/nginx/sites-enabled/
-    
-    # 测试Nginx配置
-    sudo nginx -t
-    
-    # 重启Nginx
-    sudo systemctl reload nginx
-    
-    echo "✅ Nginx配置完成"
-  else
-    echo "Nginx配置已存在，重载服务..."
-    sudo systemctl reload nginx
-  fi
-ENDSSH
+# 安装Node.js (如果没有)
+if ! command -v node &> /dev/null; then
+    echo "📥 安装Node.js..."
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    apt-get install -y nodejs
+fi
 
-# 清理本地临时文件
-rm dist.tar.gz
+# 安装PM2 (如果没有)
+if ! command -v pm2 &> /dev/null; then
+    echo "📥 安装PM2..."
+    npm install -g pm2
+fi
 
-echo "✅ 部署完成！"
-echo "🌐 访问地址: http://your-server-ip"
+# 安装项目依赖
+echo "📥 安装项目依赖..."
+cd $APP_DIR
+npm install --production
+
+# 安装serve（前端静态服务）
+npm install -g serve
+
+# 停止旧进程
+echo "🛑 停止旧进程..."
+pm2 delete all 2>/dev/null || true
+
+# 启动后端
+echo "🚀 启动后端服务..."
+cd $APP_DIR
+pm2 start server/server.js --name "iot-backend" \
+    --log /var/log/iot-backend.log \
+    --error /var/log/iot-backend-error.log
+
+# 启动前端
+echo "🚀 启动前端服务..."
+pm2 start "npx serve -s dist -l 4000" --name "iot-frontend" \
+    --log /var/log/iot-frontend.log
+
+# 保存PM2配置
+pm2 save
+pm2 startup | tail -1 | bash || true
+
 echo ""
-echo "📝 后续步骤:"
-echo "   1. 修改 deploy.sh 中的服务器配置"
-echo "   2. 配置域名（可选）"
-echo "   3. 配置SSL证书（推荐使用 Let's Encrypt）"
+echo "✅ 部署完成！"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🌐 访问地址:"
+echo "   前端: http://$SERVER_IP:4000"
+echo "   后端: http://$SERVER_IP:3030"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━"
+pm2 status
+EOF
+
+# 清理
+rm -f deploy.tar.gz
+
+echo ""
+echo "✨ 全部完成！"

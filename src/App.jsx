@@ -1,9 +1,17 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronRight, ChevronLeft, RotateCcw, Cpu, Zap, Layers, BarChart3, AlertTriangle, Download, FileText, Printer, File, CalendarClock, Github, Flag, Mail, X, Sparkles, Shuffle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Clock, CheckCircle, XCircle, ChevronRight, ChevronLeft, RotateCcw, Cpu, Zap, Layers, BarChart3, AlertTriangle, CalendarClock, Github, Flag, Mail, X, Sparkles, Shuffle, User } from 'lucide-react';
 import { QUESTION_BANK } from './questionBank.js';
+import { LoginView, ProfileView } from './UserComponents.jsx';
+import { ExportMenu, UserMenu } from './MenuComponents.jsx';
+import { NotificationMenu } from './NotificationComponent.jsx';
+import { AdminPanel } from './AdminPanel.jsx';
+import { FeedbackButton } from './FeedbackComponent.jsx';
+import { ErrorReportModal } from './ErrorReportModal.jsx';
+import { AnnouncementBanner } from './AnnouncementBanner.jsx';
+import * as api from './apiClient.js';
 
-// 使用解析后的题库
-const MOCK_QUESTION_BANK = QUESTION_BANK.length > 0 ? QUESTION_BANK : [
+// 默认题库（作为备用）
+const DEFAULT_QUESTION_BANK = QUESTION_BANK.length > 0 ? QUESTION_BANK : [
   {
     id: 1,
     type: 'single',
@@ -104,23 +112,137 @@ const MOCK_QUESTION_BANK = QUESTION_BANK.length > 0 ? QUESTION_BANK : [
   }
 ];
 
+// 独立的倒计时组件，避免触发整个App重渲染
+const ExamCountdown = React.memo(() => {
+  const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      let targetDate = new Date(currentYear, 10, 22, 8, 0, 0);
+      const difference = targetDate - now;
+      if (difference > 0) {
+        return {
+          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+          minutes: Math.floor((difference / 1000 / 60) % 60),
+          seconds: Math.floor((difference / 1000) % 60),
+        };
+      }
+      return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+    };
+
+    setCountdown(calculateTimeLeft());
+    const timer = setInterval(() => {
+      setCountdown(calculateTimeLeft());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="hidden md:flex items-center text-xs font-mono bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-md border border-indigo-100 shadow-sm">
+      <CalendarClock className="w-3.5 h-3.5 mr-2 text-indigo-500" />
+      <span className="mr-2 font-bold text-slate-600">理论考试倒计时:</span>
+      <span className="font-bold text-indigo-700">
+        {countdown.days}天 {countdown.hours}时 {countdown.minutes}分 {countdown.seconds}秒
+      </span>
+    </div>
+  );
+});
+
 export default function App() {
   // --- State 定义 ---
-  const [appState, setAppState] = useState('welcome'); // welcome, quiz, result
+  const [appState, setAppState] = useState('welcome'); // welcome, quiz, result, profile, login, admin
   const [quizMode, setQuizMode] = useState('practice'); // practice, exam, instant, mistakes
   const [currentQuestions, setCurrentQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
-  const [showExportMenu, setShowExportMenu] = useState(false); // 导出菜单状态
-  const exportMenuRef = useRef(null);
   const modalContentRef = useRef(null); // 用于闪电刷题弹窗自动滚动
+  
+  // 用户系统状态
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('iot_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) { return null; }
+  });
   
   // 闪电刷题弹窗相关状态
   const [showInstantModal, setShowInstantModal] = useState(false);
   const [instantQuestion, setInstantQuestion] = useState(null); // 当前闪电题目
   const [isRolling, setIsRolling] = useState(false); // 是否正在播放抽取动画
   const [instantUserAnswer, setInstantUserAnswer] = useState(null); // 闪电模式下的答案
+
+  // 纠错弹窗状态
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorQuestion, setErrorQuestion] = useState(null);
+
+  // 题库状态（从数据库加载）
+  const [MOCK_QUESTION_BANK, setMOCK_QUESTION_BANK] = useState(DEFAULT_QUESTION_BANK);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+
+  // 加载题库
+  const loadQuestionBank = async () => {
+    setIsLoadingQuestions(true);
+    const result = await api.getAllQuestions();
+    
+    if (result.success && result.questions && result.questions.length > 0) {
+      setMOCK_QUESTION_BANK(result.questions);
+      console.log(`📚 从数据库加载了 ${result.questions.length} 道题目`);
+    } else {
+      // 如果数据库为空，导入默认题库
+      console.log('📚 数据库题库为空，准备导入默认题库...');
+      const importResult = await api.importQuestions(DEFAULT_QUESTION_BANK);
+      if (importResult.success) {
+        setMOCK_QUESTION_BANK(DEFAULT_QUESTION_BANK);
+        console.log(`✅ ${importResult.message}`);
+      }
+    }
+    
+    setIsLoadingQuestions(false);
+  };
+
+  // 初始化WebSocket连接和加载题库
+  useEffect(() => {
+    api.connectWebSocket();
+    console.log('🔌 已初始化WebSocket连接');
+    
+    // 加载题库
+    loadQuestionBank();
+    
+    // 如果用户已登录，加载答题进度
+    if (currentUser && currentUser.phone) {
+      loadUserProgress(currentUser.phone);
+    }
+  }, []);
+
+  // 订阅题库更新事件
+  useEffect(() => {
+    const unsubscribes = [
+      api.subscribeWebSocket('QUESTION_ADDED', (data) => {
+        setMOCK_QUESTION_BANK(prev => [...prev, data.question]);
+        console.log('➕ 题目已添加:', data.question.id);
+      }),
+      api.subscribeWebSocket('QUESTION_UPDATED', (data) => {
+        setMOCK_QUESTION_BANK(prev => prev.map(q => 
+          q.id === data.question.id ? data.question : q
+        ));
+        console.log('✏️ 题目已更新:', data.question.id);
+      }),
+      api.subscribeWebSocket('QUESTION_DELETED', (data) => {
+        setMOCK_QUESTION_BANK(prev => prev.filter(q => q.id !== data.questionId));
+        console.log('🗑️ 题目已删除:', data.questionId);
+      }),
+      api.subscribeWebSocket('QUESTION_BANK_UPDATED', () => {
+        loadQuestionBank();
+        console.log('🔄 题库已全量更新');
+      })
+    ];
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, []);
 
   // 监听闪电刷题答案，自动滚动到底部
   useEffect(() => {
@@ -133,9 +255,6 @@ export default function App() {
       }, 100);
     }
   }, [instantUserAnswer]);
-
-  // 考试倒计时状态
-  const [examCountdown, setExamCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
   // 1. 累计刷题记录
   const [answeredIds, setAnsweredIds] = useState(() => {
@@ -181,7 +300,10 @@ export default function App() {
       const newSet = new Set(answeredIds);
       newSet.add(qId);
       setAnsweredIds(newSet);
+      // 保存到localStorage（本地缓存）
       localStorage.setItem('iot_answered_ids', JSON.stringify([...newSet]));
+      // 保存到服务器
+      saveProgressToServer(newSet, wrongQuestionIds);
     }
   };
 
@@ -199,52 +321,112 @@ export default function App() {
         // 如果答错了，添加进去
         newSet.add(qId);
       }
+      // 保存到服务器
+      saveProgressToServer(answeredIds, newSet);
       return newSet; // 返回新 Set，触发 Effect 同步存储
     });
   };
 
-  // 处理题目反馈
+  // 处理题目反馈 - 打开纠错弹窗
   const handleFeedback = (q) => {
-    const subject = `[题库纠错] 题目ID: ${q.id}`;
-    const body = `我对题目: "${q.question}" 有疑问。\n\n请在此描述问题:`;
-    window.location.href = `mailto:feedback@iotmaster.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setErrorQuestion(q);
+    setShowErrorModal(true);
   };
 
-  // 点击外部关闭菜单
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
-        setShowExportMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // --- 用户系统功能 ---
+  const ADMIN_ACCOUNT = { phone: '19312985136', password: 'Wjj19312985136...' };
+  
+  // 登录函数
+  const handleLogin = async (phone, password) => {
+    const result = await api.loginUser(phone, password);
+    
+    if (result.success) {
+      const loginUser = { ...result.user, loginTime: new Date().toISOString() };
+      delete loginUser.password; // 不在currentUser中存储密码
+      setCurrentUser(loginUser);
+      localStorage.setItem('iot_current_user', JSON.stringify(loginUser));
+      
+      // 加载用户答题进度
+      await loadUserProgress(loginUser.phone);
+      
+      setAppState('welcome');
+    }
+    
+    return result;
+  };
 
-  // --- 考试倒计时逻辑 (目标日期 11.22 8:00) ---
-  useEffect(() => {
-    const calculateTimeLeft = () => {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      let targetDate = new Date(currentYear, 10, 22, 8, 0, 0);
-      const difference = targetDate - now;
-      if (difference > 0) {
-        return {
-          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-          minutes: Math.floor((difference / 1000 / 60) % 60),
-          seconds: Math.floor((difference / 1000) % 60),
-        };
-      }
-      return { days: 0, hours: 0, minutes: 0, seconds: 0 };
-    };
+  // 加载用户答题进度
+  const loadUserProgress = async (userId) => {
+    const result = await api.getUserProgress(userId);
+    if (result.success && result.progress) {
+      setAnsweredIds(new Set(result.progress.answeredIds || []));
+      setWrongQuestionIds(new Set(result.progress.wrongIds || []));
+    }
+  };
 
-    setExamCountdown(calculateTimeLeft());
-    const timer = setInterval(() => {
-      setExamCountdown(calculateTimeLeft());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // 保存用户答题进度到数据库
+  const saveProgressToServer = async (newAnsweredIds, newWrongIds) => {
+    if (currentUser && !currentUser.isAdmin) {
+      await api.saveUserProgress(
+        currentUser.phone,
+        [...newAnsweredIds],
+        [...newWrongIds]
+      );
+    }
+  };
+  
+  // 注册函数
+  const handleRegister = async (phone, password, username) => {
+    // 检查是否为管理员账号
+    if (phone === ADMIN_ACCOUNT.phone) {
+      return { success: false, message: '该手机号为系统保留号码' };
+    }
+    
+    const displayName = username || `用户${phone.slice(-4)}`;
+    const avatar = '👤';
+    
+    const result = await api.registerUser(phone, password, displayName, avatar);
+    
+    if (result.success) {
+      // 自动登录
+      const loginUser = { ...result.user };
+      delete loginUser.password;
+      setCurrentUser(loginUser);
+      localStorage.setItem('iot_current_user', JSON.stringify(loginUser));
+      setAppState('welcome');
+    }
+    
+    return result;
+  };
+  
+  // 退出登录
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('iot_current_user');
+    setAppState('welcome');
+    setShowUserMenu(false);
+  };
+  
+  // 更新用户信息
+  const handleUpdateProfile = (username, avatar) => {
+    if (!currentUser) return;
+    
+    const updatedUser = { ...currentUser, username, avatar };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('iot_current_user', JSON.stringify(updatedUser));
+    
+    // 如果不是管理员，更新users表中的数据
+    if (!currentUser.isAdmin) {
+      const users = JSON.parse(localStorage.getItem('iot_users') || '[]');
+      const userIndex = users.findIndex(u => u.phone === currentUser.phone);
+      if (userIndex !== -1) {
+        users[userIndex] = { ...users[userIndex], username, avatar };
+        localStorage.setItem('iot_users', JSON.stringify(users));
+      }
+    }
+  };
+
+
 
 
   // --- 闪电刷题 逻辑 (动画版) ---
@@ -291,117 +473,6 @@ export default function App() {
 
   const showInstantResult = !!instantUserAnswer;
 
-
-  // --- 导出功能核心逻辑 ---
-  const handleExport = (format) => {
-    const date = new Date().toLocaleDateString().replace(/\//g, '-');
-    const title = `物联网安调题库_${date}`;
-    let content = '';
-    let mimeType = '';
-    let extension = '';
-
-    if (format === 'pdf') {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return alert("请允许弹出窗口以进行打印导出");
-      
-      const htmlContent = `
-        <html>
-          <head>
-            <title>${title}</title>
-            <style>
-              body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #333; }
-              h1 { text-align: center; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }
-              .question-item { margin-bottom: 25px; page-break-inside: avoid; border: 1px solid #f0f0f0; padding: 15px; border-radius: 8px; }
-              .question-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; line-height: 1.5; }
-              .tag { font-size: 12px; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; color: #666; margin-left: 5px; font-weight: normal; }
-              .options { margin-left: 15px; margin-bottom: 10px; }
-              .option { margin: 5px 0; font-size: 14px; }
-              .answer-block { background: #f9fafb; padding: 10px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
-              .correct-ans { font-weight: bold; color: #059669; }
-              .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #999; }
-            </style>
-          </head>
-          <body>
-            <h1>${title}</h1>
-            ${MOCK_QUESTION_BANK.map((q, index) => `
-              <div class="question-item">
-                <div class="question-title">
-                  ${index + 1}. ${q.question} <span class="tag">${q.category}</span>
-                </div>
-                <div class="options">
-                  ${q.options.map(opt => `<div class="option">${opt.id}. ${opt.text}</div>`).join('')}
-                </div>
-                <div class="answer-block">
-                  <div>正确答案: <span class="correct-ans">${q.correctAnswer}</span></div>
-                  <div style="margin-top:5px; color:#555;">解析: ${q.explanation}</div>
-                </div>
-              </div>
-            `).join('')}
-            <div class="footer">生成于: ${new Date().toLocaleString()}</div>
-            <script>
-              window.onload = () => { setTimeout(() => { window.print(); }, 500); };
-            </script>
-          </body>
-        </html>
-      `;
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setShowExportMenu(false);
-      return;
-    }
-
-    if (format === 'txt') {
-      content = `=== ${title} ===\n\n` + MOCK_QUESTION_BANK.map((q, i) => (
-        `${i + 1}. [${q.category}] ${q.question}\n` +
-        q.options.map(o => `   ${o.id}. ${o.text}`).join('\n') +
-        `\n   > 正确答案: ${q.correctAnswer}\n   > 解析: ${q.explanation}\n`
-      )).join('\n-----------------------------------\n\n');
-      mimeType = 'text/plain';
-      extension = 'txt';
-    } else if (format === 'md') {
-      content = `# ${title}\n\n` + MOCK_QUESTION_BANK.map((q, i) => (
-        `### ${i + 1}. ${q.question}\n` +
-        `**分类**: \`${q.category}\`\n\n` +
-        q.options.map(o => `- [ ] ${o.id}. ${o.text}`).join('\n') +
-        `\n\n> **正确答案**: **${q.correctAnswer}** \n> **解析**: ${q.explanation}`
-      )).join('\n\n---\n\n');
-      mimeType = 'text/markdown';
-      extension = 'md';
-    } else if (format === 'word') {
-      content = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head><meta charset='utf-8'><title>${title}</title></head>
-        <body style="font-family: Arial, sans-serif;">
-          <h1>${title}</h1>
-          ${MOCK_QUESTION_BANK.map((q, i) => `
-            <div style="margin-bottom: 20px;">
-              <h3>${i + 1}. ${q.question} <span style="font-size: 12px; color: #666; background:#eee; padding:2px;">[${q.category}]</span></h3>
-              <ul style="list-style-type: none; padding-left: 0;">
-                ${q.options.map(opt => `<li>${opt.id}. ${opt.text}</li>`).join('')}
-              </ul>
-              <p style="color: green;"><strong>正确答案: ${q.correctAnswer}</strong></p>
-              <p style="background-color: #f9f9f9; padding: 5px;"><em>解析: ${q.explanation}</em></p>
-              <hr/>
-            </div>
-          `).join('')}
-        </body></html>
-      `;
-      mimeType = 'application/msword';
-      extension = 'doc';
-    }
-
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${title}.${extension}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
-  };
-
   // --- 普通模式逻辑 ---
 
   const startQuiz = (mode) => {
@@ -416,9 +487,9 @@ export default function App() {
     setCurrentIndex(0);
 
     if (mode === 'exam') {
-      const shuffled = shuffleArray(MOCK_QUESTION_BANK).slice(0, 4);
+      const shuffled = shuffleArray(MOCK_QUESTION_BANK).slice(0, 100);
       setCurrentQuestions(shuffled);
-      setTimeLeft(60); 
+      setTimeLeft(9000); // 150分钟 = 9000秒
       setAppState('quiz');
     } else if (mode === 'mistakes') {
       const wrongQuestions = MOCK_QUESTION_BANK.filter(q => wrongQuestionIds.has(q.id));
@@ -437,19 +508,68 @@ export default function App() {
   };
 
   const handleOptionSelect = (qId, optionId) => {
-    if (userAnswers[qId]) return; 
     if (appState === 'result') return;
 
-    setUserAnswers(prev => ({ ...prev, [qId]: optionId }));
-    markQuestionAsPracticed(qId);
-
     const currentQ = MOCK_QUESTION_BANK.find(q => q.id === qId);
-    const isCorrect = currentQ.correctAnswer === optionId;
+    
+    if (currentQ.type === 'multiple') {
+      // 多选题：切换选项
+      setUserAnswers(prev => {
+        const current = prev[qId] || [];
+        const isArray = Array.isArray(current);
+        const currentArray = isArray ? current : [];
+        
+        const newAnswers = currentArray.includes(optionId)
+          ? currentArray.filter(id => id !== optionId)  // 取消选择
+          : [...currentArray, optionId];  // 添加选择
+        
+        return { ...prev, [qId]: newAnswers };
+      });
+    } else {
+      // 单选题：选了就不能改（练习模式立即显示答案）
+      if (userAnswers[qId]) return;
+      setUserAnswers(prev => ({ ...prev, [qId]: optionId }));
+      
+      // 单选题立即判断对错
+      const isCorrect = currentQ.correctAnswer === optionId;
+      updateMistakeNotebook(qId, isCorrect);
+    }
+    
+    markQuestionAsPracticed(qId);
+  };
+
+  // 多选题确认答案
+  const confirmMultipleChoice = (qId) => {
+    const currentQ = MOCK_QUESTION_BANK.find(q => q.id === qId);
+    const userAnswer = userAnswers[qId] || [];
+    
+    // 判断答案是否正确
+    const correctAnswers = currentQ.correctAnswer.split(',').map(a => a.trim()).sort();
+    const userAnswersArray = Array.isArray(userAnswer) ? userAnswer.sort() : [];
+    const isCorrect = JSON.stringify(correctAnswers) === JSON.stringify(userAnswersArray);
+    
     updateMistakeNotebook(qId, isCorrect);
+    
+    // 标记为已确认（防止再次修改）
+    setUserAnswers(prev => ({
+      ...prev,
+      [qId + '_confirmed']: true
+    }));
   };
 
   const submitQuiz = () => {
     setAppState('result');
+    
+    // 提交时判断所有多选题
+    currentQuestions.forEach(q => {
+      if (q.type === 'multiple' && !userAnswers[q.id + '_confirmed']) {
+        const userAnswer = userAnswers[q.id] || [];
+        const correctAnswers = q.correctAnswer.split(',').map(a => a.trim()).sort();
+        const userAnswersArray = Array.isArray(userAnswer) ? userAnswer.sort() : [];
+        const isCorrect = JSON.stringify(correctAnswers) === JSON.stringify(userAnswersArray);
+        updateMistakeNotebook(q.id, isCorrect);
+      }
+    });
   };
 
   useEffect(() => {
@@ -467,14 +587,29 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [appState, quizMode, timeLeft]);
+  }, [appState, quizMode]);
 
   const resultStats = useMemo(() => {
     if (appState !== 'result') return { score: 0 };
     let correctCount = 0;
+    
     currentQuestions.forEach(q => {
-      if (userAnswers[q.id] === q.correctAnswer) correctCount++;
+      const userAnswer = userAnswers[q.id];
+      let isCorrect = false;
+      
+      if (q.type === 'multiple') {
+        // 多选题：比较数组
+        const correctAnswers = q.correctAnswer.split(',').map(a => a.trim()).sort();
+        const userAnswersArray = Array.isArray(userAnswer) ? userAnswer.sort() : [];
+        isCorrect = JSON.stringify(correctAnswers) === JSON.stringify(userAnswersArray);
+      } else {
+        // 单选题：直接比较
+        isCorrect = userAnswer === q.correctAnswer;
+      }
+      
+      if (isCorrect) correctCount++;
     });
+    
     return {
       score: Math.round((correctCount / currentQuestions.length) * 100),
       correctCount,
@@ -483,6 +618,37 @@ export default function App() {
     };
   }, [appState, currentQuestions, userAnswers]);
 
+  // 计算用户统计数据
+  const userStats = useMemo(() => {
+    if (!currentUser) return null;
+    
+    const categoryStats = {};
+    MOCK_QUESTION_BANK.forEach(q => {
+      if (!categoryStats[q.category]) {
+        categoryStats[q.category] = { total: 0, answered: 0, correct: 0 };
+      }
+      categoryStats[q.category].total++;
+      if (answeredIds.has(q.id)) {
+        categoryStats[q.category].answered++;
+        if (!wrongQuestionIds.has(q.id)) {
+          categoryStats[q.category].correct++;
+        }
+      }
+    });
+    
+    const totalAnswered = answeredIds.size;
+    const totalCorrect = Array.from(answeredIds).filter(id => !wrongQuestionIds.has(id)).length;
+    const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+    
+    return {
+      totalQuestions: MOCK_QUESTION_BANK.length,
+      totalAnswered,
+      totalCorrect,
+      totalWrong: wrongQuestionIds.size,
+      accuracy,
+      categoryStats
+    };
+  }, [currentUser, answeredIds, wrongQuestionIds]);
 
   // --- 组件视图 ---
 
@@ -515,7 +681,7 @@ export default function App() {
             <span className="bg-purple-50 text-purple-600 text-xs font-bold px-2 py-1 rounded">模考</span>
           </div>
           <h3 className="font-bold text-lg text-slate-800">限时随机模考</h3>
-          <p className="text-sm text-slate-500 mt-2 opacity-80">随机抽取 4 题，限时 60 秒。</p>
+          <p className="text-sm text-slate-500 mt-2 opacity-80">随机抽取 100 题，限时 150 分钟。</p>
         </button>
 
         <button 
@@ -563,6 +729,26 @@ export default function App() {
     const progress = ((currentIndex + 1) / currentQuestions.length) * 100;
     const isLastQuestion = currentIndex === currentQuestions.length - 1;
     const userAnswer = userAnswers[currentQ.id];
+    const quizContentRef = useRef(null);
+
+    // 切换题目时重置滚动位置
+    useEffect(() => {
+      if (quizContentRef.current) {
+        quizContentRef.current.scrollTop = 0;
+      }
+    }, [currentIndex]);
+
+    // 选择答案后，在练习模式下自动滚动到解析区域
+    useEffect(() => {
+      if (userAnswer && (quizMode === 'practice' || quizMode === 'mistakes') && quizContentRef.current) {
+        setTimeout(() => {
+          quizContentRef.current.scrollTo({
+            top: quizContentRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }, 100);
+      }
+    }, [userAnswer, quizMode]);
     
     return (
       <div className="max-w-3xl mx-auto w-full">
@@ -588,8 +774,9 @@ export default function App() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden flex flex-col relative">
-          <div className="p-6 md:p-8">
+        <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden flex flex-col relative max-h-[calc(100vh-200px)]">
+          {/* 可滚动内容区域 */}
+          <div ref={quizContentRef} className="overflow-y-auto p-6 md:p-8 flex-1">
             <div className="flex items-center justify-between mb-5">
                <div className="flex items-center gap-2">
                  <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
@@ -611,6 +798,11 @@ export default function App() {
             </div>
             
             <h2 className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed mb-8">
+              {currentQ.type === 'multiple' && (
+                <span className="inline-block bg-blue-100 text-blue-700 text-sm font-bold px-3 py-1 rounded-lg mr-3">
+                  多选题
+                </span>
+              )}
               {currentQ.question}
             </h2>
 
@@ -618,17 +810,44 @@ export default function App() {
               {currentQ.options.map((opt) => {
                 let containerClass = "border-slate-200 hover:bg-slate-50 text-slate-600";
                 let iconClass = "bg-slate-100 text-slate-500";
+                
+                // 多选题和单选题的判断逻辑
+                const isMultiple = currentQ.type === 'multiple';
+                const isConfirmed = userAnswers[currentQ.id + '_confirmed'];
+                const correctAnswers = isMultiple ? currentQ.correctAnswer.split(',').map(a => a.trim()) : [currentQ.correctAnswer];
+                
+                // 判断当前选项是否被选中
+                const isSelected = isMultiple 
+                  ? (Array.isArray(userAnswer) && userAnswer.includes(opt.id))
+                  : userAnswer === opt.id;
+                
+                // 判断是否显示反馈（单选题选择后，或多选题确认后）
+                const showFeedback = isMultiple 
+                  ? (isConfirmed && (quizMode === 'practice' || quizMode === 'mistakes'))
+                  : (userAnswer && (quizMode === 'practice' || quizMode === 'mistakes'));
 
-                if (userAnswer === opt.id) {
-                    containerClass = "border-indigo-500 bg-indigo-50 text-indigo-700";
-                    iconClass = "bg-indigo-500 text-white";
+                // 如果在练习模式下已选择答案，显示正确/错误样式
+                if (showFeedback) {
+                  if (correctAnswers.includes(opt.id)) {
+                    containerClass = "border-green-500 bg-green-50 text-green-800";
+                    iconClass = "bg-green-500 text-white";
+                  } else if (isSelected) {
+                    containerClass = "border-red-500 bg-red-50 text-red-800";
+                    iconClass = "bg-red-500 text-white";
+                  } else {
+                    containerClass = "opacity-50 border-slate-100";
+                  }
+                } else if (isSelected) {
+                  containerClass = "border-indigo-500 bg-indigo-50 text-indigo-700";
+                  iconClass = "bg-indigo-500 text-white";
                 }
 
                 return (
                   <button
                     key={opt.id}
                     onClick={() => handleOptionSelect(currentQ.id, opt.id)}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between group ${containerClass}`}
+                    disabled={showFeedback}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between group ${containerClass} ${showFeedback ? 'cursor-default' : ''}`}
                   >
                     <div className="flex items-center">
                       <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mr-4 transition-colors ${iconClass}`}>
@@ -636,12 +855,76 @@ export default function App() {
                       </span>
                       <span className="font-medium">{opt.text}</span>
                     </div>
-                    {userAnswer === opt.id && <CheckCircle className="w-5 h-5 text-indigo-500" />}
+                    {showFeedback && opt.id === currentQ.correctAnswer && <CheckCircle className="w-5 h-5 text-green-600" />}
+                    {showFeedback && userAnswer === opt.id && userAnswer !== currentQ.correctAnswer && <XCircle className="w-5 h-5 text-red-600" />}
+                    {!showFeedback && userAnswer === opt.id && <CheckCircle className="w-5 h-5 text-indigo-500" />}
                   </button>
                 );
               })}
             </div>
+
+            {/* 多选题确认按钮 */}
+            {currentQ.type === 'multiple' && !userAnswers[currentQ.id + '_confirmed'] && (quizMode === 'practice' || quizMode === 'mistakes') && (
+              <div className="mt-4">
+                <button
+                  onClick={() => confirmMultipleChoice(currentQ.id)}
+                  disabled={!userAnswer || (Array.isArray(userAnswer) && userAnswer.length === 0)}
+                  className={`w-full py-3 rounded-xl font-bold transition-all ${
+                    userAnswer && Array.isArray(userAnswer) && userAnswer.length > 0
+                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  确认答案（已选择 {Array.isArray(userAnswer) ? userAnswer.length : 0} 项）
+                </button>
+              </div>
+            )}
+
+            {/* 练习模式下显示即时解析 */}
+            {userAnswer && (quizMode === 'practice' || quizMode === 'mistakes') && (
+              currentQ.type === 'single' || userAnswers[currentQ.id + '_confirmed']
+            ) && (() => {
+              // 判断答案是否正确
+              let isAnswerCorrect = false;
+              if (currentQ.type === 'multiple') {
+                const correctAnswers = currentQ.correctAnswer.split(',').map(a => a.trim()).sort();
+                const userAnswersArray = Array.isArray(userAnswer) ? userAnswer.sort() : [];
+                isAnswerCorrect = JSON.stringify(correctAnswers) === JSON.stringify(userAnswersArray);
+              } else {
+                isAnswerCorrect = userAnswer === currentQ.correctAnswer;
+              }
+              
+              return (
+                <div className={`mt-6 p-4 rounded-xl border-2 animate-in slide-in-from-bottom-2 fade-in ${
+                  isAnswerCorrect 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className={`font-bold text-sm mb-2 flex items-center ${
+                    isAnswerCorrect ? 'text-green-700' : 'text-red-700'
+                  }`}>
+                    {isAnswerCorrect ? (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        回答正确！
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-5 h-5 mr-2" />
+                        回答错误！正确答案是：{currentQ.correctAnswer}
+                      </>
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-700">
+                    <span className="font-bold">解析：</span>
+                    {currentQ.explanation}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
+
+          {/* 固定底部按钮栏 */}
 
           <div className="bg-slate-50 p-4 md:p-6 flex justify-between items-center border-t border-slate-100">
               <button
@@ -700,14 +983,34 @@ export default function App() {
           <div className="space-y-4">
              {currentQuestions.map((q, index) => {
                  const userAns = userAnswers[q.id];
-                 const isCorrect = userAns === q.correctAnswer;
+                 
+                 // 判断答案是否正确
+                 let isCorrect = false;
+                 if (q.type === 'multiple') {
+                   const correctAnswers = q.correctAnswer.split(',').map(a => a.trim()).sort();
+                   const userAnswersArray = Array.isArray(userAns) ? userAns.sort() : [];
+                   isCorrect = JSON.stringify(correctAnswers) === JSON.stringify(userAnswersArray);
+                 } else {
+                   isCorrect = userAns === q.correctAnswer;
+                 }
+                 
+                 // 格式化用户答案显示
+                 const userAnsDisplay = Array.isArray(userAns) ? userAns.join(', ') : (userAns || '未选');
+                 
                  return (
                      <div key={q.id} className={`bg-white rounded-xl p-6 shadow-sm border-l-4 ${isCorrect ? 'border-green-500' : 'border-red-500'}`}>
                         <div className="flex justify-between mb-2">
-                            <span className="font-bold text-slate-800">#{index+1} {q.question}</span>
-                            {isCorrect ? <span className="text-green-600 text-sm font-bold">正确</span> : <span className="text-red-600 text-sm font-bold">错误</span>}
+                            <span className="font-bold text-slate-800">
+                              #{index+1} 
+                              {q.type === 'multiple' && <span className="text-blue-600 text-xs ml-2">[多选]</span>}
+                              {' '}{q.question}
+                            </span>
+                            {isCorrect ? <span className="text-green-600 text-sm font-bold">✓ 正确</span> : <span className="text-red-600 text-sm font-bold">✗ 错误</span>}
                         </div>
-                        <div className="text-sm text-slate-500 mb-2">你的答案: {userAns || '未选'} | 正确答案: {q.correctAnswer}</div>
+                        <div className="text-sm text-slate-500 mb-2">
+                          你的答案: <span className="font-medium">{userAnsDisplay}</span> | 
+                          正确答案: <span className="font-medium">{q.correctAnswer}</span>
+                        </div>
                         <div className="bg-slate-50 p-3 rounded text-sm text-slate-600 flex justify-between items-start">
                           <div>{q.explanation}</div>
                           <button onClick={() => handleFeedback(q)} className="ml-4 text-slate-400 hover:text-orange-500 transition-colors"><Flag className="w-4 h-4" /></button>
@@ -734,13 +1037,7 @@ export default function App() {
             </div>
             
             {/* 倒计时 */}
-            <div className="hidden md:flex items-center text-xs font-mono bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-md border border-indigo-100 shadow-sm">
-               <CalendarClock className="w-3.5 h-3.5 mr-2 text-indigo-500" />
-               <span className="mr-2 font-bold text-slate-600">理论考试倒计时:</span>
-               <span className="font-bold text-indigo-700">
-                 {examCountdown.days}天 {examCountdown.hours}时 {examCountdown.minutes}分 {examCountdown.seconds}秒
-               </span>
-            </div>
+            <ExamCountdown />
           </div>
           
           {/* 右侧区域 */}
@@ -751,32 +1048,31 @@ export default function App() {
             </div>
 
             {/* 导出按钮 */}
-            <div className="relative" ref={exportMenuRef}>
-              <button 
-                onClick={() => setShowExportMenu(!showExportMenu)}
-                className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors"
-                title="导出题库"
+            <ExportMenu MOCK_QUESTION_BANK={MOCK_QUESTION_BANK} />
+
+            {/* 意见反馈 */}
+            <FeedbackButton currentUser={currentUser} />
+
+            {/* 消息通知 */}
+            <NotificationMenu currentUser={currentUser} />
+
+            {/* 用户菜单 */}
+            {currentUser ? (
+              <UserMenu 
+                currentUser={currentUser} 
+                onProfile={() => setAppState('profile')}
+                onAdmin={() => setAppState('admin')}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <button
+                onClick={() => setAppState('login')}
+                className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-all"
               >
-                <Download className="w-5 h-5" />
+                <User className="w-4 h-4" />
+                <span>登录 / 注册</span>
               </button>
-              {showExportMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
-                   <div className="px-4 py-2 border-b border-slate-50 text-xs font-bold text-slate-400 uppercase tracking-wider">选择格式</div>
-                   <button onClick={() => handleExport('word')} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center">
-                     <File className="w-4 h-4 mr-2" /> 导出 Word (.doc)
-                   </button>
-                   <button onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center">
-                     <Printer className="w-4 h-4 mr-2" /> 打印 / PDF
-                   </button>
-                   <button onClick={() => handleExport('md')} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center">
-                     <FileCode className="w-4 h-4 mr-2" /> 导出 Markdown
-                   </button>
-                   <button onClick={() => handleExport('txt')} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center">
-                     <FileText className="w-4 h-4 mr-2" /> 导出 Txt
-                   </button>
-                </div>
-              )}
-            </div>
+            )}
 
             {appState === 'quiz' && (
                 <button onClick={() => setAppState('welcome')} className="text-sm text-slate-500 hover:text-red-600 font-medium transition-colors whitespace-nowrap">
@@ -787,10 +1083,16 @@ export default function App() {
         </div>
       </header>
 
+      {/* 全局公告 */}
+      <AnnouncementBanner />
+
       <main className="max-w-5xl mx-auto px-4 py-8">
         {appState === 'welcome' && <WelcomeView />}
         {appState === 'quiz' && <QuizView />}
         {appState === 'result' && <ResultView />}
+        {appState === 'login' && <LoginView handleLogin={handleLogin} handleRegister={handleRegister} setAppState={setAppState} />}
+        {appState === 'profile' && <ProfileView currentUser={currentUser} userStats={userStats} handleUpdateProfile={handleUpdateProfile} setAppState={setAppState} />}
+        {appState === 'admin' && <AdminPanel setAppState={setAppState} MOCK_QUESTION_BANK={MOCK_QUESTION_BANK} answeredIds={answeredIds} wrongQuestionIds={wrongQuestionIds} />}
       </main>
       
       <a 
@@ -917,6 +1219,18 @@ export default function App() {
             )}
             </div>
         </div>
+      )}
+
+      {/* 纠错弹窗 */}
+      {showErrorModal && errorQuestion && (
+        <ErrorReportModal
+          question={errorQuestion}
+          currentUser={currentUser}
+          onClose={() => {
+            setShowErrorModal(false);
+            setErrorQuestion(null);
+          }}
+        />
       )}
     </div>
   );
