@@ -178,6 +178,9 @@ export default function App() {
   // 纠错弹窗状态
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorQuestion, setErrorQuestion] = useState(null);
+  
+  // 复制QQ提示状态
+  const [showCopyToast, setShowCopyToast] = useState(false);
 
   // 题库状态（从数据库加载）
   const [MOCK_QUESTION_BANK, setMOCK_QUESTION_BANK] = useState(DEFAULT_QUESTION_BANK);
@@ -362,6 +365,27 @@ export default function App() {
       setAnsweredIds(new Set(result.progress.answeredIds || []));
       setWrongQuestionIds(new Set(result.progress.wrongIds || []));
     }
+  };
+
+  // 复制QQ号到剪贴板
+  const copyQQNumber = () => {
+    const qqNumber = '1849619997';
+    navigator.clipboard.writeText(qqNumber).then(() => {
+      setShowCopyToast(true);
+      setTimeout(() => setShowCopyToast(false), 2000);
+    }).catch(() => {
+      // 备用方法
+      const textarea = document.createElement('textarea');
+      textarea.value = qqNumber;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setShowCopyToast(true);
+      setTimeout(() => setShowCopyToast(false), 2000);
+    });
   };
 
   // 保存用户答题进度到数据库
@@ -1216,13 +1240,20 @@ export default function App() {
         <span className="text-xs font-medium text-slate-500 group-hover:text-indigo-600 transition-colors hidden sm:inline">GitHub Project</span>
       </a>
 
-      <a 
-        href="mailto:feedback@iotmaster.com"
-        className="fixed bottom-16 sm:bottom-4 right-2 sm:right-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur border border-slate-200 px-2 sm:px-3 py-1.5 rounded-full shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group"
+      <button 
+        onClick={copyQQNumber}
+        className="fixed bottom-16 sm:bottom-4 right-2 sm:right-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur border border-slate-200 px-2 sm:px-3 py-1.5 rounded-full shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group cursor-pointer"
       >
         <Mail className="w-4 h-4 text-slate-500 group-hover:text-indigo-600 transition-colors" />
         <span className="text-xs font-medium text-slate-500 group-hover:text-indigo-600 transition-colors hidden sm:inline">联系作者</span>
-      </a>
+      </button>
+
+      {/* 复制成功提示 */}
+      {showCopyToast && (
+        <div className="fixed bottom-32 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg animate-in slide-in-from-bottom-5 fade-in">
+          ✅ 已复制QQ：1849619997
+        </div>
+      )}
 
       {showInstantModal && instantQuestion && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
