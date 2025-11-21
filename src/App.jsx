@@ -483,10 +483,12 @@ export default function App() {
     }
 
     setQuizMode(mode);
-    setUserAnswers({});
-    setCurrentIndex(0);
 
     if (mode === 'exam') {
+      // 模拟考：每次从头开始，清除之前的进度
+      localStorage.removeItem('iot_exam_progress');
+      setUserAnswers({});
+      setCurrentIndex(0);
       const shuffled = shuffleArray(MOCK_QUESTION_BANK).slice(0, 100);
       setCurrentQuestions(shuffled);
       setTimeLeft(9000); // 150分钟 = 9000秒
@@ -497,14 +499,50 @@ export default function App() {
         alert("太棒了！你当前没有错题记录。");
         return;
       }
+      setUserAnswers({});
+      setCurrentIndex(0);
       setCurrentQuestions(wrongQuestions);
       setTimeLeft(0);
       setAppState('quiz');
     } else {
+      // 顺序练习：从上次进度继续
+      const savedProgress = localStorage.getItem('iot_practice_progress');
+      if (savedProgress) {
+        const progress = JSON.parse(savedProgress);
+        setCurrentIndex(progress.currentIndex || 0);
+        setUserAnswers(progress.userAnswers || {});
+      } else {
+        setCurrentIndex(0);
+        setUserAnswers({});
+      }
       setCurrentQuestions(MOCK_QUESTION_BANK);
       setTimeLeft(0);
       setAppState('quiz');
     }
+  };
+
+  // 保存顺序练习进度
+  const savePracticeProgress = useCallback(() => {
+    if (quizMode === 'practice') {
+      const progress = {
+        currentIndex,
+        userAnswers,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('iot_practice_progress', JSON.stringify(progress));
+    }
+  }, [quizMode, currentIndex, userAnswers]);
+
+  // 退出答题
+  const exitQuiz = () => {
+    if (quizMode === 'practice') {
+      // 顺序练习：保存进度
+      savePracticeProgress();
+    } else if (quizMode === 'exam') {
+      // 模拟考：清除进度
+      localStorage.removeItem('iot_exam_progress');
+    }
+    setAppState('welcome');
   };
 
   const handleOptionSelect = (qId, optionId) => {
@@ -536,6 +574,11 @@ export default function App() {
     }
     
     markQuestionAsPracticed(qId);
+    
+    // 顺序练习自动保存进度
+    if (quizMode === 'practice') {
+      setTimeout(savePracticeProgress, 500);
+    }
   };
 
   // 多选题确认答案
@@ -724,6 +767,39 @@ export default function App() {
     </div>
   );
 
+  // 答题卡组件
+  const AnswerSheet = ({ questions, userAnswers, currentIndex, onJumpTo }) => {
+    return (
+      <div className="bg-white rounded-xl shadow-md border border-slate-100 p-4 sticky top-20">
+        <h3 className="font-bold text-slate-800 mb-3 flex items-center">
+          <span className="text-base">答题卡</span>
+          <span className="ml-2 text-xs text-slate-500">({Object.keys(userAnswers).filter(k => !k.includes('_confirmed')).length}/{questions.length})</span>
+        </h3>
+        <div className="grid grid-cols-5 gap-2 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
+          {questions.map((q, index) => {
+            const isAnswered = userAnswers[q.id] !== undefined;
+            const isCurrent = index === currentIndex;
+            return (
+              <button
+                key={q.id}
+                onClick={() => onJumpTo(index)}
+                className={`w-full aspect-square rounded-lg font-medium text-sm transition-all ${
+                  isCurrent
+                    ? 'bg-indigo-600 text-white ring-2 ring-indigo-300'
+                    : isAnswered
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {index + 1}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const QuizView = () => {
     const currentQ = currentQuestions[currentIndex];
     const progress = ((currentIndex + 1) / currentQuestions.length) * 100;
@@ -749,10 +825,30 @@ export default function App() {
         }, 100);
       }
     }, [userAnswer, quizMode]);
+
+    // 跳转到指定题目
+    const jumpToQuestion = (index) => {
+      setCurrentIndex(index);
+    };
     
     return (
-      <div className="max-w-3xl mx-auto w-full">
-        <div className="bg-white shadow-sm rounded-xl p-4 mb-6 flex justify-between items-center sticky top-4 z-10 border border-slate-100">
+      <div className="w-full">
+        {/* 返回按钮 - 左上角 */}
+        <div className="mb-4">
+          <button 
+            onClick={exitQuiz}
+            className="flex items-center space-x-2 text-slate-600 hover:text-indigo-600 transition-colors group"
+          >
+            <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+            <span className="font-medium">返回</span>
+          </button>
+        </div>
+
+        {/* 主体区域：题目+答题卡 */}
+        <div className="flex gap-6">
+          {/* 左侧题目区域 */}
+          <div className="flex-1 min-w-0">
+            <div className="bg-white shadow-sm rounded-xl p-4 mb-6 flex justify-between items-center sticky top-4 z-10 border border-slate-100">
           {quizMode === 'mistakes' ? (
              <div className="flex items-center text-red-600 font-bold">
                <AlertTriangle className="w-5 h-5 mr-2" /> 错题攻坚 ({currentIndex + 1}/{currentQuestions.length})
@@ -774,9 +870,9 @@ export default function App() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden flex flex-col relative max-h-[calc(100vh-200px)]">
-          {/* 可滚动内容区域 */}
-          <div ref={quizContentRef} className="overflow-y-auto p-6 md:p-8 flex-1">
+            <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden flex flex-col relative max-h-[calc(100vh-250px)]">
+              {/* 可滚动内容区域 */}
+              <div ref={quizContentRef} className="overflow-y-auto p-6 md:p-8 flex-1">
             <div className="flex items-center justify-between mb-5">
                <div className="flex items-center gap-2">
                  <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
@@ -950,7 +1046,21 @@ export default function App() {
                   下一题 <ChevronRight className="w-5 h-5 ml-1" />
               </button>
               )}
+            </div>
           </div>
+        </div>
+        
+          {/* 右侧答题卡 - 仅顺序练习和模拟考显示 */}
+          {(quizMode === 'practice' || quizMode === 'exam') && (
+            <div className="w-64 hidden lg:block shrink-0">
+              <AnswerSheet 
+                questions={currentQuestions}
+                userAnswers={userAnswers}
+                currentIndex={currentIndex}
+                onJumpTo={jumpToQuestion}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1076,7 +1186,7 @@ export default function App() {
             )}
 
             {appState === 'quiz' && (
-                <button onClick={() => setAppState('welcome')} className="text-sm text-slate-500 hover:text-red-600 font-medium transition-colors whitespace-nowrap">
+                <button onClick={exitQuiz} className="text-sm text-slate-500 hover:text-red-600 font-medium transition-colors whitespace-nowrap">
                 退出
                 </button>
             )}
