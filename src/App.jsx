@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, ChevronRight, ChevronLeft, RotateCcw, Cpu, Zap, Layers, BarChart3, AlertTriangle, CalendarClock, Github, Flag, Mail, X, Sparkles, Shuffle, User } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ChevronRight, ChevronLeft, RotateCcw, Cpu, Zap, Layers, BarChart3, AlertTriangle, CalendarClock, Github, Flag, Mail, X, Sparkles, Shuffle, User, BookOpen } from 'lucide-react';
 import { QUESTION_BANK } from './questionBank.js';
 import { LoginView, ProfileView } from './UserComponents.jsx';
 import { ExportMenu, UserMenu } from './MenuComponents.jsx';
@@ -166,6 +166,7 @@ export default function App() {
   const [userAnswers, setUserAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
   const modalContentRef = useRef(null); // 用于闪电刷题弹窗自动滚动
+  const saveProgressTimerRef = useRef(null); // 用于跟踪保存进度的定时器
   
   // 用户系统状态
   const [currentUser, setCurrentUser] = useState(() => {
@@ -185,6 +186,9 @@ export default function App() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorQuestion, setErrorQuestion] = useState(null);
   
+  // 顺序练习选择弹窗状态
+  const [showPracticeModal, setShowPracticeModal] = useState(false);
+  
   // 复制QQ提示状态
   const [showCopyToast, setShowCopyToast] = useState(false);
   
@@ -203,6 +207,20 @@ export default function App() {
     if (result.success && result.questions && result.questions.length > 0) {
       setMOCK_QUESTION_BANK(result.questions);
       console.log(`📚 从数据库加载了 ${result.questions.length} 道题目`);
+      
+      // 检查数据是否需要更新(对比第一题的type)
+      const dbFirstQ = result.questions.find(q => q.id === 343);
+      const localFirstQ = DEFAULT_QUESTION_BANK.find(q => q.id === 343);
+      if (dbFirstQ && localFirstQ && dbFirstQ.type !== localFirstQ.type) {
+        console.log(`⚠️ 数据库题库版本过旧,准备更新...`);
+        console.log(`DB: ID=${dbFirstQ.id}, type=${dbFirstQ.type}`);
+        console.log(`Local: ID=${localFirstQ.id}, type=${localFirstQ.type}`);
+        const importResult = await api.importQuestions(DEFAULT_QUESTION_BANK);
+        if (importResult.success) {
+          setMOCK_QUESTION_BANK(DEFAULT_QUESTION_BANK);
+          console.log(`✅ 题库已更新: ${importResult.message}`);
+        }
+      }
     } else {
       // 如果数据库为空，导入默认题库
       console.log('📚 数据库题库为空，准备导入默认题库...');
@@ -580,7 +598,24 @@ export default function App() {
       setTimeLeft(0);
       setAppState('quiz');
     } else {
-      // 顺序练习：从上次进度继续
+      // 顺序练习：检查是否有保存的进度
+      const savedProgress = localStorage.getItem('iot_practice_progress');
+      if (savedProgress) {
+        // 有进度，显示弹窗让用户选择
+        setShowPracticeModal(true);
+      } else {
+        // 没有进度，直接开始
+        startPracticeQuiz(false);
+      }
+    }
+  };
+
+  // 开始顺序练习（重新或继续）
+  const startPracticeQuiz = (continueFromSaved) => {
+    setShowPracticeModal(false);
+    
+    if (continueFromSaved) {
+      // 继续答题：从上次进度继续
       const savedProgress = localStorage.getItem('iot_practice_progress');
       if (savedProgress) {
         const progress = JSON.parse(savedProgress);
@@ -590,10 +625,16 @@ export default function App() {
         setCurrentIndex(0);
         setUserAnswers({});
       }
-      setCurrentQuestions(MOCK_QUESTION_BANK);
-      setTimeLeft(0);
-      setAppState('quiz');
+    } else {
+      // 重新答题：清除本次练习的答题记录，但保留累积刷题统计
+      localStorage.removeItem('iot_practice_progress');
+      setCurrentIndex(0);
+      setUserAnswers({});
     }
+    
+    setCurrentQuestions(MOCK_QUESTION_BANK);
+    setTimeLeft(0);
+    setAppState('quiz');
   };
 
   // 保存顺序练习进度
@@ -605,8 +646,22 @@ export default function App() {
         timestamp: Date.now()
       };
       localStorage.setItem('iot_practice_progress', JSON.stringify(progress));
+      console.log(`[DEBUG] 保存进度: currentIndex=${currentIndex}, 答题数=${Object.keys(userAnswers).filter(k => !k.includes('_confirmed')).length}`);
     }
   }, [quizMode, currentIndex, userAnswers]);
+
+  // 防抖保存进度（清除之前的定时器）
+  const debouncedSaveProgress = useCallback(() => {
+    // 清除之前的定时器
+    if (saveProgressTimerRef.current) {
+      clearTimeout(saveProgressTimerRef.current);
+    }
+    // 设置新的定时器
+    saveProgressTimerRef.current = setTimeout(() => {
+      savePracticeProgress();
+      saveProgressTimerRef.current = null;
+    }, 300);
+  }, [savePracticeProgress]);
 
   // 退出答题
   const exitQuiz = () => {
@@ -630,12 +685,25 @@ export default function App() {
   };
 
   const handleOptionSelect = (qId, optionId) => {
+    console.log(`[DEBUG] 点击选项: qId=${qId}, optionId=${optionId}, appState=${appState}`);
     if (appState === 'result') return;
 
-    const currentQ = MOCK_QUESTION_BANK.find(q => q.id === qId);
+    // 使用currentQuestions而不是MOCK_QUESTION_BANK，确保数据一致
+    const currentQ = currentQuestions.find(q => q.id === qId);
+    if (!currentQ) {
+      console.error(`[ERROR] 找不到题目 qId=${qId}`);
+      return;
+    }
+    console.log(`[DEBUG] 题目类型=${currentQ.type}, 已确认=${userAnswers[qId + '_confirmed']}`);
     
     if (currentQ.type === 'multiple') {
-      // 多选题：切换选项
+      // 多选题：已确认后不能修改
+      if (userAnswers[qId + '_confirmed']) {
+        console.log('[DEBUG] 多选题已确认，阻止修改');
+        return;
+      }
+      
+      // 切换选项
       setUserAnswers(prev => {
         const current = prev[qId] || [];
         const isArray = Array.isArray(current);
@@ -645,12 +713,18 @@ export default function App() {
           ? currentArray.filter(id => id !== optionId)  // 取消选择
           : [...currentArray, optionId];  // 添加选择
         
-        return { ...prev, [qId]: newAnswers };
+        const result = { ...prev, [qId]: newAnswers };
+        console.log(`[DEBUG] 多选题 qId=${qId}, 选项=${optionId}, 当前已选=${newAnswers.join(',')}, 总答题数=${Object.keys(result).filter(k => !k.includes('_confirmed')).length}`);
+        return result;
       });
     } else {
       // 单选题：选了就不能改（练习模式立即显示答案）
       if (userAnswers[qId]) return;
-      setUserAnswers(prev => ({ ...prev, [qId]: optionId }));
+      setUserAnswers(prev => {
+        const newAnswers = { ...prev, [qId]: optionId };
+        console.log(`[DEBUG] 单选题 qId=${qId}, option=${optionId}, 当前总答题数=${Object.keys(newAnswers).filter(k => !k.includes('_confirmed')).length}`);
+        return newAnswers;
+      });
       
       // 单选题立即判断对错
       const isCorrect = currentQ.correctAnswer === optionId;
@@ -658,16 +732,15 @@ export default function App() {
     }
     
     markQuestionAsPracticed(qId);
-    
-    // 顺序练习自动保存进度
-    if (quizMode === 'practice') {
-      setTimeout(savePracticeProgress, 500);
-    }
   };
 
   // 多选题确认答案
   const confirmMultipleChoice = (qId) => {
-    const currentQ = MOCK_QUESTION_BANK.find(q => q.id === qId);
+    const currentQ = currentQuestions.find(q => q.id === qId);
+    if (!currentQ) {
+      console.error(`[ERROR] confirmMultipleChoice: 找不到题目 qId=${qId}`);
+      return;
+    }
     const userAnswer = userAnswers[qId] || [];
     
     // 判断答案是否正确
@@ -863,6 +936,22 @@ export default function App() {
           {questions.map((q, index) => {
             const isAnswered = userAnswers[q.id] !== undefined;
             const isCurrent = index === currentIndex;
+            
+            // 判断答题是否正确(只在已答题且非当前题时显示)
+            let isCorrect = false;
+            if (isAnswered && !isCurrent) {
+              const userAns = userAnswers[q.id];
+              if (q.type === 'multiple') {
+                // 多选题:比较数组
+                const correctAnswers = q.correctAnswer.split(',').map(a => a.trim()).sort();
+                const userAnswersArray = Array.isArray(userAns) ? userAns.sort() : [];
+                isCorrect = JSON.stringify(correctAnswers) === JSON.stringify(userAnswersArray);
+              } else {
+                // 单选题:直接比较
+                isCorrect = userAns === q.correctAnswer;
+              }
+            }
+            
             return (
               <button
                 key={q.id}
@@ -871,7 +960,7 @@ export default function App() {
                   isCurrent
                     ? 'bg-indigo-600 text-white ring-2 ring-indigo-300'
                     : isAnswered
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    ? (isCorrect ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200')
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -913,6 +1002,10 @@ export default function App() {
     // 跳转到指定题目
     const jumpToQuestion = (index) => {
       setCurrentIndex(index);
+      // 跳转题目时保存进度
+      if (quizMode === 'practice') {
+        debouncedSaveProgress();
+      }
     };
     
     return (
@@ -1025,9 +1118,13 @@ export default function App() {
                 return (
                   <button
                     key={opt.id}
-                    onClick={() => handleOptionSelect(currentQ.id, opt.id)}
+                    onClick={(e) => {
+                      console.log(`[DEBUG] 按钮点击事件触发: opt.id=${opt.id}, disabled=${showFeedback}, 题型=${currentQ.type}`);
+                      e.stopPropagation();
+                      handleOptionSelect(currentQ.id, opt.id);
+                    }}
                     disabled={showFeedback}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between group ${containerClass} ${showFeedback ? 'cursor-default' : ''}`}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between group ${containerClass} ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-center">
                       <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mr-4 transition-colors ${iconClass}`}>
@@ -1035,9 +1132,10 @@ export default function App() {
                       </span>
                       <span className="font-medium">{opt.text}</span>
                     </div>
-                    {showFeedback && opt.id === currentQ.correctAnswer && <CheckCircle className="w-5 h-5 text-green-600" />}
-                    {showFeedback && userAnswer === opt.id && userAnswer !== currentQ.correctAnswer && <XCircle className="w-5 h-5 text-red-600" />}
-                    {!showFeedback && userAnswer === opt.id && <CheckCircle className="w-5 h-5 text-indigo-500" />}
+                    {/* 显示正确/错误图标 */}
+                    {showFeedback && correctAnswers.includes(opt.id) && <CheckCircle className="w-5 h-5 text-green-600" />}
+                    {showFeedback && isSelected && !correctAnswers.includes(opt.id) && <XCircle className="w-5 h-5 text-red-600" />}
+                    {!showFeedback && isSelected && <CheckCircle className="w-5 h-5 text-indigo-500" />}
                   </button>
                 );
               })}
@@ -1108,7 +1206,13 @@ export default function App() {
 
           <div className="bg-slate-50 p-4 md:p-6 flex justify-between items-center border-t border-slate-100">
               <button
-              onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
+              onClick={() => {
+                setCurrentIndex(prev => Math.max(0, prev - 1));
+                // 切换题目时保存进度
+                if (quizMode === 'practice') {
+                  debouncedSaveProgress();
+                }
+              }}
               disabled={currentIndex === 0}
               className="flex items-center px-4 py-2 text-slate-600 disabled:opacity-30 hover:text-indigo-600 font-medium transition-colors"
               >
@@ -1124,7 +1228,13 @@ export default function App() {
               </button>
               ) : (
               <button
-                  onClick={() => setCurrentIndex(prev => Math.min(currentQuestions.length - 1, prev + 1))}
+                  onClick={() => {
+                    setCurrentIndex(prev => Math.min(currentQuestions.length - 1, prev + 1));
+                    // 切换题目时保存进度
+                    if (quizMode === 'practice') {
+                      debouncedSaveProgress();
+                    }
+                  }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 font-bold flex items-center"
               >
                   下一题 <ChevronRight className="w-5 h-5 ml-1" />
@@ -1433,6 +1543,39 @@ export default function App() {
             setErrorQuestion(null);
           }}
         />
+      )}
+
+      {/* 顺序练习选择弹窗 */}
+      {showPracticeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 animate-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 p-6 rounded-t-2xl">
+              <div className="flex items-center space-x-3 text-white">
+                <BookOpen className="w-8 h-8" />
+                <h3 className="text-2xl font-bold">顺序练习</h3>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-600 leading-relaxed mb-6">
+                检测到上次未完成的答题进度，是否继续答题？
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => startPracticeQuiz(true)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-lg transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>📚 继续答题</span>
+                </button>
+                <button
+                  onClick={() => startPracticeQuiz(false)}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-6 py-3 rounded-lg transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>🔄 重新开始</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 全局警告弹窗 */}

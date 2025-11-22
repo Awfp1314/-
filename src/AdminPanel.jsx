@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronLeft, Users, TrendingUp, MessageSquare, Send, Award, Clock, CheckCircle, XCircle, MessageCircle, Eye, Trash2, AlertTriangle, Reply, BookOpen, Megaphone } from 'lucide-react';
+import { ChevronLeft, Users, TrendingUp, MessageSquare, Send, Award, Clock, CheckCircle, XCircle, MessageCircle, Eye, Trash2, AlertTriangle, Reply, BookOpen, Megaphone, Search } from 'lucide-react';
 import { ReplyModal } from './ReplyModal.jsx';
 import { QuestionManager } from './QuestionManager.jsx';
 import * as api from './apiClient.js';
@@ -906,12 +906,11 @@ export const AdminPanel = ({ setAppState, MOCK_QUESTION_BANK, answeredIds, wrong
                       <button
                         onClick={() => {
                           setActiveTab('questions');
-                          setQuestionSearch(report.question);
                         }}
                         className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg font-medium transition-colors flex items-center"
                       >
                         <Search className="w-3 h-3 mr-1" />
-                        跳转到题库
+                        查看题库
                       </button>
                     </div>
                   </div>

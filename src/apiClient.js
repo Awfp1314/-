@@ -1,6 +1,6 @@
 // API配置
-const API_BASE_URL = 'http://localhost:3030/api';
-const WS_URL = 'ws://localhost:3030';
+const API_BASE_URL = '/api';
+const WS_URL = 'ws://47.108.72.126:3030';
 
 // WebSocket连接
 let ws = null;
